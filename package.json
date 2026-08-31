@@ -1,0 +1,17 @@
+{
+  "name": "@direct/web",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @direct/web",
+    "build": "npm run build -w @direct/web",
+    "lint": "npm run lint -w @direct/web",
+    "db:reset": "npx supabase db reset"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
