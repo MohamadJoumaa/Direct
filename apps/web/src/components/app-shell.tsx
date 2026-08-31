@@ -1,0 +1,201 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  LayoutDashboard,
+  LogOut,
+  MapPin,
+  Package,
+  Settings,
+  Store,
+  Truck,
+  User,
+  Wallet,
+  Warehouse,
+  History,
+  Shield,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { LanguageToggle } from "@/components/language-toggle";
+import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAuth } from "@/lib/auth-context";
+import { useStore } from "@/lib/store-context";
+import { useI18n } from "@/lib/i18n";
+import type { UserRole } from "@direct/shared";
+import { cn } from "@/lib/utils";
+import { useDriverGeolocation } from "@/hooks/use-driver-geolocation";
+
+export function AppShell({
+  children,
+  title,
+}: {
+  children: React.ReactNode;
+  title?: string;
+}) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { user, effectiveRole, isAdmin, driver } = useAuth();
+  const { logout, setViewingAs, state } = useStore();
+  const { dict } = useI18n();
+  useDriverGeolocation();
+
+  if (!user) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
+        <p className="text-easy">{dict.common.pleaseSignIn}</p>
+        <Link
+          href="/login"
+          className="touch-target inline-flex h-12 items-center rounded-lg bg-primary px-6 text-lg text-primary-foreground"
+        >
+          {dict.common.logIn}
+        </Link>
+      </div>
+    );
+  }
+
+  const clientLinks = [
+    { href: "/app/client", label: dict.nav.home, icon: LayoutDashboard },
+    { href: "/app/client/new", label: dict.nav.newOrder, icon: Package },
+    { href: "/app/client/history", label: dict.nav.history, icon: History },
+    { href: "/app/profile", label: dict.nav.profile, icon: User },
+  ];
+
+  const driverLinks = [
+    { href: "/app/driver", label: dict.nav.ordersTab, icon: Package },
+    { href: "/app/driver/dashboard", label: dict.nav.money, icon: Wallet },
+    { href: "/app/profile", label: dict.nav.profile, icon: User },
+  ];
+
+  const adminLinks = [
+    { href: "/app/admin", label: dict.nav.ordersTab, icon: Package },
+    { href: "/app/admin/drivers", label: dict.nav.drivers, icon: Truck },
+    { href: "/app/admin/warehouses", label: dict.nav.warehouses, icon: Warehouse },
+    { href: "/app/admin/businesses", label: dict.nav.businesses, icon: Store },
+    { href: "/app/admin/money", label: dict.nav.budget, icon: Wallet },
+    { href: "/app/admin/settings", label: dict.nav.settings, icon: Settings },
+    { href: "/app/admin/reports", label: dict.nav.reports, icon: Shield },
+    { href: "/app/profile", label: dict.nav.profile, icon: User },
+  ];
+
+  const links =
+    effectiveRole === "admin"
+      ? adminLinks
+      : effectiveRole === "driver"
+        ? driverLinks
+        : clientLinks;
+
+  return (
+    <div className="flex min-h-screen flex-col bg-muted/40">
+      <header className="sticky top-0 z-40 border-b bg-background">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="flex items-center gap-2">
+              <Image
+                src="/logo-icon.png"
+                alt="Direct logo"
+                width={41}
+                height={32}
+                className="h-8 w-auto"
+                unoptimized
+              />
+              <span className="text-xl font-extrabold tracking-tight">Direct</span>
+            </Link>
+            {title ? (
+              <span className="hidden text-muted-foreground sm:inline">· {title}</span>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {isAdmin ? (
+              <Select
+                value={state.viewingAs ?? "admin"}
+                onValueChange={(v) => {
+                  const role = (v as UserRole | "admin" | null) ?? "admin";
+                  if (role === "admin") {
+                    setViewingAs(null);
+                    router.push("/app/admin");
+                  } else {
+                    setViewingAs(role);
+                    if (role === "driver") router.push("/app/driver");
+                    else router.push("/app/client");
+                  }
+                }}
+                items={[
+                  { label: dict.admin.viewAsAdmin, value: "admin" },
+                  { label: dict.admin.viewAsClient, value: "client" },
+                  { label: dict.admin.viewAsBusiness, value: "business" },
+                  { label: dict.admin.viewAsDriver, value: "driver" },
+                ]}
+              >
+                <SelectTrigger className="touch-target min-w-40 text-base">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="admin">{dict.admin.viewAsAdmin}</SelectItem>
+                    <SelectItem value="client">{dict.admin.viewAsClient}</SelectItem>
+                    <SelectItem value="business">{dict.admin.viewAsBusiness}</SelectItem>
+                    <SelectItem value="driver">{dict.admin.viewAsDriver}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            ) : null}
+            {driver ? (
+              <Badge variant={driver.is_online ? "default" : "secondary"} className="text-sm">
+                <MapPin />
+                {driver.is_online ? dict.common.online : dict.common.offline}
+              </Badge>
+            ) : null}
+            <span className="hidden text-base font-medium sm:inline">{user.full_name}</span>
+            <LanguageToggle />
+            <ThemeToggle />
+            <Button
+              variant="outline"
+              size="lg"
+              className="touch-target rounded-full"
+              onClick={() => {
+                logout();
+                router.push("/");
+              }}
+            >
+              <LogOut data-icon="inline-start" />
+              {dict.common.logOut}
+            </Button>
+          </div>
+        </div>
+        <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-2 pb-2">
+          {links.map((link) => {
+            const Icon = link.icon;
+            const active = pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={cn(
+                  "touch-target inline-flex items-center gap-2 rounded-full px-4 py-2 text-base font-medium transition-colors",
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <Icon className="size-5" />
+                {link.label}
+              </Link>
+            );
+          })}
+        </nav>
+      </header>
+      <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">{children}</main>
+    </div>
+  );
+}
