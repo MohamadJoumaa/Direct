@@ -1,0 +1,38 @@
+---
+description: Enforce professional UI/UX using project skills (UI/UX Pro Max, React best practices, shadcn, web design guidelines)
+alwaysApply: true
+---
+
+# Professional UI standards
+
+When the task changes how a feature **looks, feels, moves, or is interacted with**, follow this workflow before inventing styles or custom components.
+
+## Required workflow
+
+1. **Read** `.cursor/skills/ui-ux-pro-max/SKILL.md` and follow its steps.
+2. **Generate a design system** before inventing colors, type, or layout:
+
+```bash
+py .cursor/skills/ui-ux-pro-max/scripts/search.py "<product> <industry> <keywords>" --design-system
+```
+
+Use `py` on this Windows machine (`python` may hit the Store stub). Prefer `--persist -p "Project Name"` when starting a new product UI so `design-system/MASTER.md` becomes the source of truth.
+
+3. **Implement** with:
+   - `.cursor/skills/vercel-react-best-practices/SKILL.md` for React/Next performance
+   - `.cursor/skills/web-design-guidelines/SKILL.md` for a11y, focus, forms, motion
+   - `.cursor/skills/shadcn/SKILL.md` — prefer shadcn/ui over one-off custom components
+   - Lucide (or another SVG icon set) — **never use emoji as structural icons**
+
+4. **Before delivery**, run a quick UX pass (`--domain ux`) and check contrast, touch targets (≥44px), focus rings, loading/empty/error states, and `prefers-reduced-motion`.
+
+## Stack skills (use when relevant)
+
+- Next.js workflows: `next-dev-loop`, `next-cache-components-*`
+- AI UI: `ai-sdk`, `ai-elements`
+- Deploy/optimize: `deploy-to-vercel`, `vercel-optimize`
+- Browser verification: `agent-browser`
+
+## Skip
+
+Pure backend, API-only, database, or infra work with no UI surface.
