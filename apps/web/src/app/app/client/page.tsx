@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDeliveryCash } from "@direct/shared";
 import { publicDriverLabel } from "@/lib/demo-store";
 import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
@@ -147,7 +148,7 @@ export default function ClientHomePage() {
                     <strong>
                       {o.eta_minutes ?? "—"} {dict.common.minutes}
                     </strong>{" "}
-                    · ${o.delivery_fee_usd.toFixed(2)} {dict.common.cash}
+                    · {formatDeliveryCash(o.delivery_fee_usd, o.delivery_fee_lbp)} {dict.common.cash}
                   </p>
                   <LinkButton href={`/app/client/orders/${o.id}`} size="lg" className="touch-target">
                     {dict.admin.details}

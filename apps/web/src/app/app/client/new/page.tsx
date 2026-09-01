@@ -4,7 +4,14 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { CircleDot, Square } from "lucide-react";
-import { quoteDeliveryPrice, type OrderType } from "@direct/shared";
+import {
+  formatDeliveryCash,
+  haversineKm,
+  quoteDeliveryPrice,
+  clampQuoteToBusinessCosts,
+  withBusinessOrderCosts,
+  type OrderType,
+} from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
 import {
   DeliveryMap,
@@ -92,10 +99,16 @@ function NewOrderContent() {
     }
   }, [user]);
 
-  const quote = useMemo(
-    () => quoteDeliveryPrice(orderType, state.settings),
-    [orderType, state.settings],
+  const distanceKm = useMemo(
+    () => haversineKm(pickup.lat, pickup.lng, dropoff.lat, dropoff.lng),
+    [pickup.lat, pickup.lng, dropoff.lat, dropoff.lng],
   );
+  const quote = useMemo(() => {
+    const raw = quoteDeliveryPrice(orderType, state.settings, distanceKm);
+    if (user?.role !== "business") return raw;
+    return clampQuoteToBusinessCosts(raw, withBusinessOrderCosts(user));
+  }, [orderType, state.settings, distanceKm, user]);
+  const costCaps = user?.role === "business" ? withBusinessOrderCosts(user) : null;
 
   const typeOptions: { value: OrderType; label: string; desc: string }[] = [
     { value: "normal", label: dict.order.typeFast, desc: dict.order.typeFastDesc },
@@ -364,14 +377,26 @@ function NewOrderContent() {
                     <p className="mt-1 text-sm text-muted-foreground">{dict.order.longTripNote}</p>
                   ) : null}
                   <p className="mt-3 text-xl">
-                    {dict.order.price}: <strong>${quote.total.toFixed(2)}</strong>
+                    {dict.order.price}:{" "}
+                    <strong>{formatDeliveryCash(quote.totalUsd, quote.totalLbp)}</strong>
                   </p>
-                  {quote.night > 0 ? (
+                  <p className="text-base text-muted-foreground">
+                    {dict.order.distance}: {distanceKm.toFixed(1)} {dict.common.km}
+                  </p>
+                  {quote.nightUsd > 0 ? (
                     <p className="text-base text-muted-foreground">
-                      {fmt(dict.order.nightNote, { amount: quote.night.toFixed(2) })}
+                      {fmt(dict.order.nightNote, { amount: quote.nightUsd.toFixed(2) })}
                     </p>
                   ) : null}
                   <p className="text-base text-muted-foreground">{dict.order.cashNote}</p>
+                  {costCaps ? (
+                    <p className="mt-2 text-base text-muted-foreground">
+                      {fmt(dict.order.priceRange, {
+                        min: formatDeliveryCash(costCaps.order_min_usd, costCaps.order_min_lbp),
+                        max: formatDeliveryCash(costCaps.order_max_usd, costCaps.order_max_lbp),
+                      })}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="flex gap-2">
@@ -414,7 +439,12 @@ function NewOrderContent() {
                   <strong>{dict.common.type}:</strong> {selectedType.label}
                 </p>
                 <p>
-                  <strong>{dict.common.cash}:</strong> ${quote.total.toFixed(2)}
+                  <strong>{dict.common.cash}:</strong>{" "}
+                  {formatDeliveryCash(quote.totalUsd, quote.totalLbp)}
+                </p>
+                <p>
+                  <strong>{dict.order.distance}:</strong> {distanceKm.toFixed(1)}{" "}
+                  {dict.common.km}
                 </p>
                 <div className="flex gap-2">
                   <Button

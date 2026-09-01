@@ -1,11 +1,17 @@
 import {
+  DEFAULT_BUSINESS_ORDER_COSTS,
   DEFAULT_SETTINGS,
   canAcceptAnotherOrder,
+  clampQuoteToBusinessCosts,
   estimateEtaMinutes,
   haversineKm,
   quoteDeliveryPrice,
+  roundLbp,
   splitRevenue,
+  validateBusinessOrderCosts,
+  withBusinessOrderCosts,
   workDayStart,
+  type BusinessOrderCosts,
   type CompanySettings,
   type DriverType,
   type OrderStatus,
@@ -24,6 +30,10 @@ export type Profile = {
   business_address?: string;
   business_lat?: number;
   business_lng?: number;
+  order_min_usd?: number;
+  order_max_usd?: number;
+  order_min_lbp?: number;
+  order_max_lbp?: number;
   avatar_url?: string;
   created_at: string;
 };
@@ -62,6 +72,7 @@ export type Order = {
   assigned_driver_id: string | null;
   long_distance_driver_id: string | null;
   delivery_fee_usd: number;
+  delivery_fee_lbp: number;
   night_surcharge_usd: number;
   company_cut_usd: number;
   driver_cut_usd: number;
@@ -212,6 +223,7 @@ function seed(): DemoState {
         business_address: DEFAULT_SHOP.business_address,
         business_lat: DEFAULT_SHOP.business_lat,
         business_lng: DEFAULT_SHOP.business_lng,
+        ...DEFAULT_BUSINESS_ORDER_COSTS,
         created_at: new Date().toISOString(),
       },
       {
@@ -439,21 +451,25 @@ function migrateState(parsed: DemoState): DemoState {
     warehouses: parsed.warehouses ?? [],
     profiles: (parsed.profiles ?? []).map((p) => {
       if (p.role !== "business") return p;
-      if (
+      const withShop =
         p.business_lat != null &&
         p.business_lng != null &&
         p.business_address &&
         p.business_address.trim().length >= 3
-      ) {
-        return p;
-      }
-      return {
-        ...p,
-        business_address: p.business_address?.trim() || DEFAULT_SHOP.business_address,
-        business_lat: p.business_lat ?? DEFAULT_SHOP.business_lat,
-        business_lng: p.business_lng ?? DEFAULT_SHOP.business_lng,
-      };
+          ? p
+          : {
+              ...p,
+              business_address: p.business_address?.trim() || DEFAULT_SHOP.business_address,
+              business_lat: p.business_lat ?? DEFAULT_SHOP.business_lat,
+              business_lng: p.business_lng ?? DEFAULT_SHOP.business_lng,
+            };
+      return { ...withShop, ...withBusinessOrderCosts(withShop) };
     }),
+    settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
+    orders: (parsed.orders ?? []).map((o) => ({
+      ...o,
+      delivery_fee_lbp: o.delivery_fee_lbp ?? 0,
+    })),
     whish: (parsed.whish ?? []).map((t) => ({
       ...t,
       kind: t.kind === "commission" ? "commission" : "subscription",
@@ -519,6 +535,7 @@ export function registerUser(
     business_address: input.role === "business" ? input.business_address : undefined,
     business_lat: input.role === "business" ? input.business_lat : undefined,
     business_lng: input.role === "business" ? input.business_lng : undefined,
+    ...(input.role === "business" ? DEFAULT_BUSINESS_ORDER_COSTS : {}),
     created_at: new Date().toISOString(),
   };
   const next = { ...state, profiles: [...state.profiles, profile] };
@@ -614,14 +631,18 @@ export function createOrder(
     pickupLng = client.business_lng;
   }
 
-  const quote = quoteDeliveryPrice(input.order_type, state.settings);
-  const split = splitRevenue(quote.total, state.settings, quote.base);
   const dist = haversineKm(
     pickupLat,
     pickupLng,
     input.dropoff_lat,
     input.dropoff_lng,
   );
+  const quoted = quoteDeliveryPrice(input.order_type, state.settings, dist);
+  const quote =
+    client?.role === "business"
+      ? clampQuoteToBusinessCosts(quoted, withBusinessOrderCosts(client))
+      : quoted;
+  const split = splitRevenue(quote.totalUsd, state.settings, quote.baseUsd);
   const warehouse =
     input.order_type === "long_distance" ? state.warehouses[0] ?? null : null;
 
@@ -640,12 +661,13 @@ export function createOrder(
     warehouse_id: warehouse?.id ?? null,
     assigned_driver_id: null,
     long_distance_driver_id: null,
-    delivery_fee_usd: quote.total,
-    night_surcharge_usd: quote.night,
+    delivery_fee_usd: quote.totalUsd,
+    delivery_fee_lbp: quote.totalLbp,
+    night_surcharge_usd: quote.nightUsd,
     company_cut_usd: split.company_cut,
     driver_cut_usd: split.driver_cut,
     eta_minutes: estimateEtaMinutes(dist, input.order_type),
-    is_night: quote.night > 0,
+    is_night: quote.nightUsd > 0,
     dispute_50_50: false,
     client_confirmed: false,
     driver_confirmed: false,
@@ -1338,6 +1360,27 @@ export function updateProfile(
         }
       : p,
   );
+  return { state: { ...state, profiles } };
+}
+
+export function updateBusinessOrderCosts(
+  state: DemoState,
+  businessId: string,
+  input: BusinessOrderCosts,
+): { state: DemoState; error?: string } {
+  const profile = state.profiles.find((p) => p.id === businessId);
+  if (!profile || profile.role !== "business") {
+    return { state, error: "Business not found" };
+  }
+  const costs = {
+    order_min_usd: Number(input.order_min_usd),
+    order_max_usd: Number(input.order_max_usd),
+    order_min_lbp: roundLbp(Number(input.order_min_lbp)),
+    order_max_lbp: roundLbp(Number(input.order_max_lbp)),
+  };
+  const err = validateBusinessOrderCosts(costs);
+  if (err) return { state, error: err };
+  const profiles = state.profiles.map((p) => (p.id === businessId ? { ...p, ...costs } : p));
   return { state: { ...state, profiles } };
 }
 

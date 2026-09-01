@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDeliveryCash } from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,7 +51,9 @@ export default function ClientHistoryPage() {
                     <TableCell>
                       <Badge>{orderTypeLabel(o.order_type, dict)}</Badge>
                     </TableCell>
-                    <TableCell className="text-base">${o.delivery_fee_usd.toFixed(2)}</TableCell>
+                    <TableCell className="text-base">
+                      {formatDeliveryCash(o.delivery_fee_usd, o.delivery_fee_lbp)}
+                    </TableCell>
                     <TableCell className="text-base capitalize">{o.status}</TableCell>
                   </TableRow>
                 ))}

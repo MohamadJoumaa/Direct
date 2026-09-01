@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -15,12 +15,23 @@ import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n";
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useStore();
   const { user, effectiveRole } = useAuth();
   const { dict } = useI18n();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const roleParam = searchParams.get("role");
+  const intendedRole = roleParam === "driver" ? "driver" : roleParam === "client" ? "client" : null;
 
   useEffect(() => {
     if (user && effectiveRole) {
@@ -45,6 +56,14 @@ export default function LoginPage() {
     router.push("/app");
   }
 
+  const subtitle =
+    intendedRole === "driver"
+      ? dict.auth.loginSubDriver
+      : intendedRole === "client"
+        ? dict.auth.loginSubClient
+        : dict.auth.loginSub;
+  const registerHref = intendedRole ? `/register?role=${intendedRole}` : "/register";
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4">
@@ -59,7 +78,7 @@ export default function LoginPage() {
       </header>
       <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 pb-24">
         <h1 className="text-3xl font-extrabold tracking-tight">{dict.auth.welcomeBack}</h1>
-        <p className="mt-2 text-base text-muted-foreground">{dict.auth.loginSub}</p>
+        <p className="mt-2 text-base text-muted-foreground">{subtitle}</p>
         <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <Label htmlFor="identifier" className="text-sm font-medium">
@@ -99,7 +118,7 @@ export default function LoginPage() {
         <p className="mt-8 text-center text-sm text-muted-foreground">
           {dict.auth.newToDirect}{" "}
           <Link
-            href="/register"
+            href={registerHref}
             className="font-semibold text-foreground underline underline-offset-4"
           >
             {dict.auth.createAccount}
@@ -107,9 +126,17 @@ export default function LoginPage() {
         </p>
         <div className="mt-10 rounded-xl bg-muted p-4 text-xs text-muted-foreground">
           <p className="font-semibold">{dict.auth.demoAccounts}</p>
-          <p className="mt-1">admin@direct.lb / admin123</p>
-          <p>client@direct.lb / client123</p>
-          <p>fast@direct.lb / driver123</p>
+          {intendedRole === "driver" ? (
+            <p className="mt-1">fast@direct.lb / driver123</p>
+          ) : intendedRole === "client" ? (
+            <p className="mt-1">client@direct.lb / client123</p>
+          ) : (
+            <>
+              <p className="mt-1">admin@direct.lb / admin123</p>
+              <p>client@direct.lb / client123</p>
+              <p>fast@direct.lb / driver123</p>
+            </>
+          )}
         </div>
       </main>
     </div>

@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { toast } from "sonner";
 import { PUBLIC_DRIVER_TYPES, DRIVER_TYPE_LABELS, type DriverType, type UserRole } from "@direct/shared";
 import { LanguageToggle } from "@/components/language-toggle";
@@ -36,13 +36,16 @@ const inputClass =
 export default function RegisterPage() {
   return (
     <MapsProvider>
-      <RegisterForm />
+      <Suspense>
+        <RegisterForm />
+      </Suspense>
     </MapsProvider>
   );
 }
 
 function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { register } = useStore();
   const { dict } = useI18n();
   const mapsAvailable = useMapsAvailable();
@@ -51,7 +54,13 @@ function RegisterForm() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [role, setRole] = useState<UserRole>("client");
+  const initialRole: UserRole =
+    searchParams.get("role") === "driver"
+      ? "driver"
+      : searchParams.get("role") === "business"
+        ? "business"
+        : "client";
+  const [role, setRole] = useState<UserRole>(initialRole);
   const [businessName, setBusinessName] = useState("");
   const [shopAddress, setShopAddress] = useState("");
   const [shopPin, setShopPin] = useState<{ lat: number; lng: number } | null>(null);
@@ -299,7 +308,7 @@ function RegisterForm() {
         <p className="mt-8 text-center text-sm text-muted-foreground">
           {dict.auth.alreadyRegistered}{" "}
           <Link
-            href="/login"
+            href={`/login?role=${role === "driver" ? "driver" : "client"}`}
             className="font-semibold text-foreground underline underline-offset-4"
           >
             {dict.common.logIn}

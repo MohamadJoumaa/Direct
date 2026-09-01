@@ -52,6 +52,13 @@ export default function HomePage() {
     router.push(qs ? `/app/client/new?${qs}` : "/app/client/new");
   }
 
+  const marketingNav = [
+    { id: "send", href: "/login?role=client", label: dict.nav.send },
+    { id: "drive", href: "/login?role=driver", label: dict.nav.drive },
+    { id: "private", href: "/login?role=client", label: dict.nav.track },
+    { id: "about", href: "#about", label: dict.nav.about },
+  ];
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Header */}
@@ -69,31 +76,16 @@ export default function HomePage() {
             />
             <span className="text-xl font-extrabold tracking-tight">Direct</span>
           </Link>
-          <nav className="hidden items-center gap-1 md:flex">
-            <a
-              href="#send"
-              className="touch-target inline-flex items-center rounded-full px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              {dict.nav.send}
-            </a>
-            <a
-              href="#about"
-              className="touch-target inline-flex items-center rounded-full px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              {dict.nav.about}
-            </a>
-            <a
-              href="#track"
-              className="touch-target inline-flex items-center rounded-full px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              {dict.nav.track}
-            </a>
-            <a
-              href="#drive"
-              className="touch-target inline-flex items-center rounded-full px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              {dict.nav.drive}
-            </a>
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 lg:flex">
+            {marketingNav.map((item) => (
+              <Link
+                key={item.id}
+                href={item.href}
+                className="touch-target inline-flex items-center whitespace-nowrap rounded-full px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                {item.label}
+              </Link>
+            ))}
           </nav>
           <div className="flex items-center gap-1.5">
             <LanguageToggle />
@@ -121,6 +113,17 @@ export default function HomePage() {
             )}
           </div>
         </div>
+        <nav className="flex flex-wrap items-center justify-center gap-1 border-t px-2 py-1 lg:hidden">
+          {marketingNav.map((item) => (
+            <Link
+              key={item.id}
+              href={item.href}
+              className="touch-target inline-flex items-center rounded-full px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
       </header>
 
       {/* Hero */}
@@ -266,67 +269,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Track section */}
-      <section id="track" className="mx-auto w-full max-w-6xl px-4 pb-20">
-        <div className="grid items-center gap-10 lg:grid-cols-2">
-          <div className="order-2 lg:order-1">
-            <div className="relative overflow-hidden rounded-3xl bg-muted p-8">
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between rounded-2xl bg-background p-4 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-10 items-center justify-center rounded-full bg-muted">
-                      <Package className="size-5" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold">#1042</p>
-                      <p className="text-xs text-muted-foreground">Hamra → Achrafieh</p>
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
-                    {dict.home.onTheWay}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-2xl bg-background p-4 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-10 items-center justify-center rounded-full bg-muted">
-                      <Clock className="size-5" />
-                    </span>
-                    <p className="text-sm font-semibold">{dict.home.arrivingIn}</p>
-                  </div>
-                  <span className="flex size-2.5 rounded-full bg-brand" aria-hidden />
-                </div>
-                <div className="flex items-center justify-between rounded-2xl bg-background p-4 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-10 items-center justify-center rounded-full bg-muted">
-                      <ShieldCheck className="size-5" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold">{dict.home.bothConfirm}</p>
-                      <p className="text-xs text-muted-foreground">{dict.home.bothConfirmBody}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="order-1 flex flex-col gap-5 lg:order-2">
-            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              {dict.home.trackTitle}
-            </h2>
-            <p className="max-w-md text-lg text-muted-foreground">{dict.home.trackBody}</p>
-            <div>
-              <LinkButton
-                href={user ? "/app/client/history" : "/login"}
-                variant="secondary"
-                className="touch-target h-12 rounded-full px-7 text-base font-semibold"
-              >
-                {dict.home.trackCta}
-              </LinkButton>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Drive section */}
       <section id="drive" className="border-y bg-[#0a0a0a] text-white">
         <div className="mx-auto grid w-full max-w-6xl items-center gap-10 px-4 py-20 lg:grid-cols-2">
@@ -339,13 +281,13 @@ export default function HomePage() {
             <p className="max-w-md text-lg text-white/70">{dict.home.driveBody}</p>
             <div className="flex flex-wrap gap-3">
               <LinkButton
-                href="/register"
+                href="/register?role=driver"
                 className="touch-target h-12 rounded-full bg-white px-7 text-base font-semibold text-black hover:bg-white/90"
               >
                 {dict.home.signUpToDrive}
               </LinkButton>
               <LinkButton
-                href="/login"
+                href="/login?role=driver"
                 variant="ghost"
                 className="touch-target h-12 rounded-full px-7 text-base font-semibold text-white hover:bg-white/10 hover:text-white"
               >

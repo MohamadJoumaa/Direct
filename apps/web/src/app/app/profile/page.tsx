@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Camera, Star } from "lucide-react";
+import { formatDeliveryCash, withBusinessOrderCosts } from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,8 @@ export default function ProfilePage() {
   const [businessName, setBusinessName] = useState(user?.business_name ?? "");
 
   if (!user) return null;
+
+  const orderCosts = user.role === "business" ? withBusinessOrderCosts(user) : null;
 
   const docLabels: Record<(typeof DOC_TYPES)[number], string> = {
     selfie: dict.profile.docSelfie,
@@ -196,6 +199,17 @@ export default function ProfilePage() {
                     {user.business_address?.trim() || "—"}
                   </p>
                   <p className="text-sm text-muted-foreground">{dict.profile.shopLocationReadonly}</p>
+                </div>
+              ) : null}
+              {orderCosts ? (
+                <div className="flex flex-col gap-2">
+                  <Label className="text-base">{dict.profile.orderCosts}</Label>
+                  <p className="text-base font-medium">
+                    {formatDeliveryCash(orderCosts.order_min_usd, orderCosts.order_min_lbp)}
+                    {" – "}
+                    {formatDeliveryCash(orderCosts.order_max_usd, orderCosts.order_max_lbp)}
+                  </p>
+                  <p className="text-sm text-muted-foreground">{dict.profile.orderCostsReadonly}</p>
                 </div>
               ) : null}
               <div className="flex flex-col gap-2">

@@ -16,6 +16,7 @@ import {
   Warehouse,
   History,
   Shield,
+  CircleDollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +72,14 @@ export function AppShell({
     { href: "/app/profile", label: dict.nav.profile, icon: User },
   ];
 
+  const businessLinks = [
+    { href: "/app/client", label: dict.nav.home, icon: LayoutDashboard },
+    { href: "/app/client/new", label: dict.nav.newOrder, icon: Package },
+    { href: "/app/client/history", label: dict.nav.history, icon: History },
+    { href: "/app/client/costs", label: dict.nav.costs, icon: CircleDollarSign },
+    { href: "/app/profile", label: dict.nav.profile, icon: User },
+  ];
+
   const driverLinks = [
     { href: "/app/driver", label: dict.nav.ordersTab, icon: Package },
     { href: "/app/driver/dashboard", label: dict.nav.money, icon: Wallet },
@@ -82,6 +91,7 @@ export function AppShell({
     { href: "/app/admin/drivers", label: dict.nav.drivers, icon: Truck },
     { href: "/app/admin/warehouses", label: dict.nav.warehouses, icon: Warehouse },
     { href: "/app/admin/businesses", label: dict.nav.businesses, icon: Store },
+    { href: "/app/admin/business-costs", label: dict.nav.orderCosts, icon: CircleDollarSign },
     { href: "/app/admin/money", label: dict.nav.budget, icon: Wallet },
     { href: "/app/admin/settings", label: dict.nav.settings, icon: Settings },
     { href: "/app/admin/reports", label: dict.nav.reports, icon: Shield },
@@ -93,7 +103,9 @@ export function AppShell({
       ? adminLinks
       : effectiveRole === "driver"
         ? driverLinks
-        : clientLinks;
+        : effectiveRole === "business"
+          ? businessLinks
+          : clientLinks;
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/40">

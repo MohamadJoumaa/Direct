@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ORDER_TYPE_LABELS } from "@direct/shared";
+import { formatDeliveryCash, ORDER_TYPE_LABELS } from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { Badge } from "@/components/ui/badge";
@@ -84,7 +84,9 @@ export default function AdminOrdersPage() {
                         <span className="text-muted-foreground">{client?.phone}</span>
                       </TableCell>
                       <TableCell className="capitalize">{o.status.replaceAll("_", " ")}</TableCell>
-                      <TableCell>${o.delivery_fee_usd.toFixed(2)}</TableCell>
+                      <TableCell>
+                        {formatDeliveryCash(o.delivery_fee_usd, o.delivery_fee_lbp)}
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap justify-end gap-2">
                           <Link
@@ -170,7 +172,9 @@ export default function AdminOrdersPage() {
                         <span className="text-muted-foreground">{driver?.phone}</span>
                       </TableCell>
                       <TableCell className="capitalize">{o.status.replaceAll("_", " ")}</TableCell>
-                      <TableCell>${o.delivery_fee_usd.toFixed(2)}</TableCell>
+                      <TableCell>
+                        {formatDeliveryCash(o.delivery_fee_usd, o.delivery_fee_lbp)}
+                      </TableCell>
                       <TableCell className="text-end">
                         <Link
                           href={`/app/admin/orders/${o.id}`}

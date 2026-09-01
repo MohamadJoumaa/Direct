@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
-import { ORDER_TYPE_LABELS } from "@direct/shared";
+import { formatDeliveryCash, ORDER_TYPE_LABELS } from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
 import { DeliveryMap } from "@/components/delivery-map";
 import { Badge } from "@/components/ui/badge";
@@ -90,7 +90,8 @@ export default function AdminOrderDetailPage() {
                 : "—"}
             </p>
             <p>
-              <strong>{dict.common.fee}:</strong> ${order.delivery_fee_usd.toFixed(2)} (driver $
+              <strong>{dict.common.fee}:</strong>{" "}
+              {formatDeliveryCash(order.delivery_fee_usd, order.delivery_fee_lbp)} (driver $
               {order.driver_cut_usd.toFixed(2)} / company ${order.company_cut_usd.toFixed(2)})
             </p>
             {order.eta_minutes ? (

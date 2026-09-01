@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { formatDeliveryCash } from "@direct/shared";
 import { publicDriverInfo, publicDriverLabel } from "@/lib/demo-store";
 import { AppShell } from "@/components/app-shell";
 import { DeliveryMap } from "@/components/delivery-map";
@@ -70,7 +71,8 @@ export default function ClientOrderDetailPage() {
               <strong>To:</strong> {order.dropoff_address}
             </p>
             <p>
-              <strong>Cash:</strong> ${order.delivery_fee_usd.toFixed(2)}
+              <strong>Cash:</strong>{" "}
+              {formatDeliveryCash(order.delivery_fee_usd, order.delivery_fee_lbp)}
             </p>
             <p>
               <strong>ETA:</strong> {order.eta_minutes ?? "—"} min

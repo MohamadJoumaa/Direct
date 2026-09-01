@@ -68,6 +68,15 @@ type StoreContextValue = {
     status: "on_time" | "late" | "missed",
     note: string,
   ) => void;
+  updateBusinessOrderCosts: (
+    businessId: string,
+    input: {
+      order_min_usd: number;
+      order_max_usd: number;
+      order_min_lbp: number;
+      order_max_lbp: number;
+    },
+  ) => string | undefined;
   updateProfile: (
     userId: string,
     input: {
@@ -185,6 +194,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         commit(demo.approveDocument(state, docId, approve)),
       addCheckin: (orderId, driverId, status, note) =>
         commit(demo.addCheckin(state, orderId, driverId, status, note)),
+      updateBusinessOrderCosts: (businessId, input) => {
+        const r = demo.updateBusinessOrderCosts(state, businessId, input);
+        if (r.error) return r.error;
+        commit(r.state);
+      },
       updateProfile: (userId, input) => {
         const r = demo.updateProfile(state, userId, input);
         if (r.error) return r.error;
