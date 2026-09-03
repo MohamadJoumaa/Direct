@@ -58,10 +58,12 @@ type StoreContextValue = {
   updateSettings: (settings: Partial<CompanySettings>) => void;
   addDocument: (
     driverId: string,
-    doc_type: "selfie" | "id" | "vehicle_registration",
+    doc_type: "selfie" | "id" | "vehicle_registration" | "driver_license",
     file_name: string,
+    file_data?: string,
   ) => void;
   approveDocument: (docId: string, approve: boolean) => void;
+  markNotificationRead: (notifId: string) => void;
   addCheckin: (
     orderId: string,
     driverId: string,
@@ -90,6 +92,7 @@ type StoreContextValue = {
       avatar_url?: string;
     },
   ) => string | undefined;
+  cancelOrder: (orderId: string, clientId: string) => string | undefined;
   rejectOrder: (orderId: string) => string | undefined;
   addDriver: (input: {
     full_name: string;
@@ -188,8 +191,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       confirmWhish: (txId) => commit(demo.confirmWhish(state, txId)),
       updateSettings: (partial) =>
         commit({ ...state, settings: { ...state.settings, ...partial } }),
-      addDocument: (driverId, doc_type, file_name) =>
-        commit(demo.addDocument(state, driverId, doc_type, file_name)),
+      addDocument: (driverId, doc_type, file_name, file_data) =>
+        commit(demo.addDocument(state, driverId, doc_type, file_name, file_data)),
+      markNotificationRead: (notifId) =>
+        commit(demo.markNotificationRead(state, notifId)),
       approveDocument: (docId, approve) =>
         commit(demo.approveDocument(state, docId, approve)),
       addCheckin: (orderId, driverId, status, note) =>
@@ -201,6 +206,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       updateProfile: (userId, input) => {
         const r = demo.updateProfile(state, userId, input);
+        if (r.error) return r.error;
+        commit(r.state);
+      },
+      cancelOrder: (orderId, clientId) => {
+        const r = demo.cancelOrder(state, orderId, clientId);
         if (r.error) return r.error;
         commit(r.state);
       },

@@ -18,7 +18,7 @@ export default function ClientOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
-  const { state, confirmDelivery } = useStore();
+  const { state, confirmDelivery, cancelOrder } = useStore();
   const { dict } = useI18n();
   const [stars, setStars] = useState(5);
   const order = state.orders.find((o) => o.id === params.id);
@@ -96,6 +96,35 @@ export default function ClientOrderDetailPage() {
             )}
           </CardContent>
         </Card>
+
+        {["pending", "accepted"].includes(order.status) && (
+          <Card className="border-2 border-destructive/30 bg-destructive/5">
+            <CardContent className="flex flex-col gap-3 pt-6">
+              <p className="text-easy">
+                {order.status === "pending"
+                  ? "No driver has accepted yet — you can cancel freely."
+                  : "A driver accepted your order. Are you sure you want to cancel?"}
+              </p>
+              <Button
+                size="lg"
+                variant="destructive"
+                className="touch-target h-14 text-xl w-fit"
+                onClick={() => {
+                  if (!user) return;
+                  const err = cancelOrder(order.id, user.id);
+                  if (err) {
+                    toast.error(err);
+                    return;
+                  }
+                  toast.success("Order cancelled");
+                  router.push("/app/client");
+                }}
+              >
+                Cancel order
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {(order.status === "awaiting_confirmation" || order.status === "arrived") &&
         !order.client_confirmed ? (

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { UserPlus } from "lucide-react";
+import { ShieldCheck, UserPlus } from "lucide-react";
 import { DRIVER_TYPE_LABELS, PUBLIC_DRIVER_TYPES, type DriverType } from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +32,7 @@ import { useI18n } from "@/lib/i18n";
 
 export default function AdminDriversPage() {
   const { isAdmin, user } = useAuth();
-  const { state, approveDocument, addDriver, removeDriver } = useStore();
+  const { state, addDriver, removeDriver } = useStore();
   const { dict } = useI18n();
 
   const [name, setName] = useState("");
@@ -180,7 +180,14 @@ export default function AdminDriversPage() {
                   const isSelf = d.id === user.id;
                   return (
                     <TableRow key={d.id}>
-                      <TableCell className="font-medium">{p?.full_name}</TableCell>
+                      <TableCell className="font-medium">
+                        <span className="inline-flex items-center gap-1.5">
+                          {p?.full_name}
+                          {d.is_trusted ? (
+                            <ShieldCheck className="size-4 text-emerald-500" />
+                          ) : null}
+                        </span>
+                      </TableCell>
                       <TableCell>{p?.phone}</TableCell>
                       <TableCell>
                         <Badge>{DRIVER_TYPE_LABELS[d.driver_type]}</Badge>
@@ -216,62 +223,22 @@ export default function AdminDriversPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-2">
-          <CardHeader>
-            <CardTitle className="text-2xl">Trusted documents</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {state.documents.length === 0 ? (
-              <p className="text-muted-foreground">No uploads yet.</p>
-            ) : (
-              state.documents.map((doc) => {
-                const p = state.profiles.find((x) => x.id === doc.driver_id);
-                return (
-                  <div
-                    key={doc.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"
-                  >
-                    <div>
-                      <p className="text-lg font-semibold">
-                        {p?.full_name} — {doc.doc_type}
-                      </p>
-                      <p className="text-base text-muted-foreground">
-                        {doc.file_name} · {doc.status}
-                      </p>
-                    </div>
-                    {doc.status === "pending" ? (
-                      <div className="flex gap-2">
-                        <Button
-                          size="lg"
-                          className="touch-target"
-                          onClick={() => {
-                            approveDocument(doc.id, true);
-                            toast.success("Approved");
-                          }}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          size="lg"
-                          variant="outline"
-                          className="touch-target"
-                          onClick={() => {
-                            approveDocument(doc.id, false);
-                            toast.message("Rejected");
-                          }}
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    ) : (
-                      <Badge className="capitalize">{doc.status}</Badge>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
+        {state.documents.some((d) => d.status === "pending") ? (
+          <Card className="border-2 border-amber-200 dark:border-amber-800">
+            <CardContent className="flex items-center justify-between gap-3 py-4">
+              <p className="text-base font-medium">
+                {state.documents.filter((d) => d.status === "pending").length} document(s) pending review
+              </p>
+              <Button
+                variant="outline"
+                className="touch-target"
+                onClick={() => window.location.assign("/app/admin/documents")}
+              >
+                Review documents
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </AppShell>
   );

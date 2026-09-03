@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Camera, Star } from "lucide-react";
+import { Camera, Star, ShieldCheck } from "lucide-react";
 import { formatDeliveryCash, withBusinessOrderCosts } from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
 
-const DOC_TYPES = ["selfie", "id", "vehicle_registration"] as const;
+const DOC_TYPES = ["selfie", "id", "vehicle_registration", "driver_license"] as const;
 
 /** Downscale the chosen image so the demo store stays small. */
 function fileToAvatar(file: File): Promise<string> {
@@ -68,6 +68,7 @@ export default function ProfilePage() {
     selfie: dict.profile.docSelfie,
     id: dict.profile.docId,
     vehicle_registration: dict.profile.docVehicle,
+    driver_license: dict.profile.docLicense,
   };
 
   const initials = user.full_name
@@ -143,7 +144,12 @@ export default function ProfilePage() {
               onChange={onAvatarChange}
             />
             <div className="min-w-0">
-              <h1 className="truncate text-2xl font-extrabold tracking-tight">{user.full_name}</h1>
+              <h1 className="flex items-center gap-2 truncate text-2xl font-extrabold tracking-tight">
+                {user.full_name}
+                {driver?.is_trusted ? (
+                  <ShieldCheck className="size-5 shrink-0 text-emerald-500" aria-label={dict.profile.verified} />
+                ) : null}
+              </h1>
               <p className="text-base capitalize text-muted-foreground">{user.role}</p>
               {driver ? (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -250,13 +256,13 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {driver && !driver.is_trusted ? (
+        {driver ? (
           <Card className="border-2">
             <CardHeader>
-              <CardTitle className="text-2xl">{dict.profile.becomeTrusted}</CardTitle>
+              <CardTitle className="text-2xl">{dict.profile.legalDocuments}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <p className="text-easy text-muted-foreground">{dict.profile.uploadDocsNote}</p>
+              <p className="text-base text-muted-foreground">{dict.profile.uploadDocsOptional}</p>
               {DOC_TYPES.map((docType) => {
                 const existing = state.documents.find(
                   (d) => d.driver_id === user.id && d.doc_type === docType,
@@ -264,35 +270,58 @@ export default function ProfilePage() {
                 return (
                   <div
                     key={docType}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"
+                    className="flex flex-col gap-2 rounded-xl border p-4"
                   >
-                    <div>
-                      <p className="text-lg font-semibold">{docLabels[docType]}</p>
-                      {existing ? (
-                        <Badge variant="secondary" className="mt-1 capitalize">
-                          {existing.status}: {existing.file_name}
-                        </Badge>
-                      ) : (
-                        <p className="text-base text-muted-foreground">
-                          {dict.profile.notUploaded}
-                        </p>
-                      )}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-lg font-semibold">{docLabels[docType]}</p>
+                        {docType === "selfie" ? (
+                          <p className="text-sm text-amber-600 dark:text-amber-400">
+                            {dict.profile.selfieHint}
+                          </p>
+                        ) : null}
+                        {existing ? (
+                          <Badge variant="secondary" className="mt-1 capitalize">
+                            {existing.status}: {existing.file_name}
+                          </Badge>
+                        ) : (
+                          <p className="text-base text-muted-foreground">
+                            {dict.profile.notUploaded}
+                          </p>
+                        )}
+                      </div>
+                      <label className="touch-target inline-flex h-11 cursor-pointer items-center rounded-full bg-primary px-5 text-base font-semibold text-primary-foreground transition-opacity hover:opacity-90 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring">
+                        {dict.profile.upload}
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          className="sr-only"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            let fileData: string | undefined;
+                            if (file.type.startsWith("image/")) {
+                              fileData = await fileToAvatar(file);
+                            }
+                            addDocument(user.id, docType, file.name, fileData);
+                            toast.success(dict.profile.uploadedToast);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
                     </div>
-                    <label className="touch-target inline-flex h-11 cursor-pointer items-center rounded-full bg-primary px-5 text-base font-semibold text-primary-foreground transition-opacity hover:opacity-90 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring">
-                      {dict.profile.upload}
-                      <input
-                        type="file"
-                        accept="image/*,.pdf"
-                        className="sr-only"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          addDocument(user.id, docType, file.name);
-                          toast.success(dict.profile.uploadedToast);
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
+                    {existing?.file_data ? (
+                      <div className="mt-1">
+                        <Image
+                          src={existing.file_data}
+                          alt={docLabels[docType]}
+                          width={96}
+                          height={96}
+                          className="rounded-lg border object-cover"
+                          unoptimized
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

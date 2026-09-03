@@ -238,7 +238,7 @@ export default function AdminSettingsPage() {
           <CardContent className="flex flex-col gap-2 text-lg">
             {state.warehouses.map((w) => (
               <p key={w.id}>
-                <strong>{w.name}</strong> — {w.address} ({w.lat}, {w.lng})
+                <strong>{w.name}</strong> — {w.address}
               </p>
             ))}
           </CardContent>

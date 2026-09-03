@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Bell,
   LayoutDashboard,
   LogOut,
   MapPin,
@@ -16,7 +17,7 @@ import {
   Warehouse,
   History,
   Shield,
-  CircleDollarSign,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,58 @@ import { useI18n } from "@/lib/i18n";
 import type { UserRole } from "@direct/shared";
 import { cn } from "@/lib/utils";
 import { useDriverGeolocation } from "@/hooks/use-driver-geolocation";
+
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+
+function NotificationBell() {
+  const { user } = useAuth();
+  const { state, markNotificationRead } = useStore();
+  if (!user) return null;
+  const notifs = state.notifications.filter((n) => n.user_id === user.id);
+  const unread = notifs.filter((n) => !n.read).length;
+  if (notifs.length === 0) return null;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative touch-target">
+          <Bell className="size-5" />
+          {unread > 0 ? (
+            <span className="absolute -end-0.5 -top-0.5 flex size-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+              {unread}
+            </span>
+          ) : null}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <div className="border-b px-4 py-3">
+          <p className="text-sm font-semibold">Notifications</p>
+        </div>
+        <div className="max-h-64 overflow-y-auto">
+          {notifs.map((n) => (
+            <button
+              key={n.id}
+              type="button"
+              className={cn(
+                "flex w-full flex-col gap-0.5 border-b px-4 py-3 text-start transition-colors hover:bg-muted/50",
+                !n.read && "bg-primary/5",
+              )}
+              onClick={() => {
+                if (!n.read) markNotificationRead(n.id);
+              }}
+            >
+              <p className="text-sm font-medium">{n.title}</p>
+              <p className="text-xs text-muted-foreground">{n.body}</p>
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export function AppShell({
   children,
@@ -76,7 +129,6 @@ export function AppShell({
     { href: "/app/client", label: dict.nav.home, icon: LayoutDashboard },
     { href: "/app/client/new", label: dict.nav.newOrder, icon: Package },
     { href: "/app/client/history", label: dict.nav.history, icon: History },
-    { href: "/app/client/costs", label: dict.nav.costs, icon: CircleDollarSign },
     { href: "/app/profile", label: dict.nav.profile, icon: User },
   ];
 
@@ -91,8 +143,8 @@ export function AppShell({
     { href: "/app/admin/drivers", label: dict.nav.drivers, icon: Truck },
     { href: "/app/admin/warehouses", label: dict.nav.warehouses, icon: Warehouse },
     { href: "/app/admin/businesses", label: dict.nav.businesses, icon: Store },
-    { href: "/app/admin/business-costs", label: dict.nav.orderCosts, icon: CircleDollarSign },
     { href: "/app/admin/money", label: dict.nav.budget, icon: Wallet },
+    { href: "/app/admin/documents", label: dict.nav.documents, icon: FileText },
     { href: "/app/admin/settings", label: dict.nav.settings, icon: Settings },
     { href: "/app/admin/reports", label: dict.nav.reports, icon: Shield },
     { href: "/app/profile", label: dict.nav.profile, icon: User },
@@ -168,6 +220,7 @@ export function AppShell({
                 {driver.is_online ? dict.common.online : dict.common.offline}
               </Badge>
             ) : null}
+            <NotificationBell />
             <span className="hidden text-base font-medium sm:inline">{user.full_name}</span>
             <LanguageToggle />
             <ThemeToggle />

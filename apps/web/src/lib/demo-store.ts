@@ -121,9 +121,19 @@ export type WhishTx = {
 export type DriverDocument = {
   id: string;
   driver_id: string;
-  doc_type: "selfie" | "id" | "vehicle_registration";
+  doc_type: "selfie" | "id" | "vehicle_registration" | "driver_license";
   file_name: string;
+  file_data?: string; // base64 data URL for preview
   status: "pending" | "approved" | "rejected";
+  created_at: string;
+};
+
+export type Notification = {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  read: boolean;
   created_at: string;
 };
 
@@ -165,6 +175,7 @@ export type DemoState = {
   checkins: PrivateCheckin[];
   warehouses: Warehouse[];
   products: WarehouseProduct[];
+  notifications: Notification[];
   settings: CompanySettings;
   sessionUserId: string | null;
   viewingAs: UserRole | null;
@@ -366,6 +377,7 @@ function seed(): DemoState {
       },
     ],
     documents: [],
+    notifications: [],
     checkins: [],
     products: [],
     warehouses: [
@@ -449,6 +461,7 @@ function migrateState(parsed: DemoState): DemoState {
     ...parsed,
     products: parsed.products ?? [],
     warehouses: parsed.warehouses ?? [],
+    notifications: parsed.notifications ?? [],
     profiles: (parsed.profiles ?? []).map((p) => {
       if (p.role !== "business") return p;
       const withShop =
@@ -1122,6 +1135,7 @@ export function addDocument(
   driverId: string,
   doc_type: DriverDocument["doc_type"],
   file_name: string,
+  file_data?: string,
 ): DemoState {
   const documents = [
     {
@@ -1129,6 +1143,7 @@ export function addDocument(
       driver_id: driverId,
       doc_type,
       file_name,
+      file_data,
       status: "pending" as const,
       created_at: new Date().toISOString(),
     },
@@ -1149,9 +1164,11 @@ export function approveDocument(
   );
   const doc = documents.find((d) => d.id === docId);
   let drivers = state.drivers;
+  let profiles = state.profiles;
+  let notifications = state.notifications;
   if (doc && approve) {
-    const all = ["selfie", "id", "vehicle_registration"] as const;
-    const ok = all.every((t) =>
+    const required = ["selfie", "id", "vehicle_registration", "driver_license"] as const;
+    const ok = required.every((t) =>
       documents.some(
         (d) => d.driver_id === doc.driver_id && d.doc_type === t && d.status === "approved",
       ),
@@ -1160,9 +1177,39 @@ export function approveDocument(
       drivers = drivers.map((d) =>
         d.id === doc.driver_id ? { ...d, is_trusted: true, driver_type: "trusted" } : d,
       );
+      // Set profile avatar from the approved selfie
+      const selfieDoc = documents.find(
+        (d) => d.driver_id === doc.driver_id && d.doc_type === "selfie" && d.status === "approved",
+      );
+      if (selfieDoc?.file_data) {
+        profiles = profiles.map((p) =>
+          p.id === doc.driver_id ? { ...p, avatar_url: selfieDoc.file_data } : p,
+        );
+      }
+      // Send verification notification
+      notifications = [
+        {
+          id: uid(),
+          user_id: doc.driver_id,
+          title: "Verification complete",
+          body: "All your documents have been approved. You are now a verified driver!",
+          read: false,
+          created_at: new Date().toISOString(),
+        },
+        ...notifications,
+      ];
     }
   }
-  return { ...state, documents, drivers };
+  return { ...state, documents, drivers, profiles, notifications };
+}
+
+export function markNotificationRead(state: DemoState, notifId: string): DemoState {
+  return {
+    ...state,
+    notifications: state.notifications.map((n) =>
+      n.id === notifId ? { ...n, read: true } : n,
+    ),
+  };
 }
 
 export function addCheckin(
@@ -1435,6 +1482,27 @@ export function driverDailyProfit(
     const label = from.toLocaleDateString(undefined, { day: "numeric", month: "short" });
     return { label, ...sumRange(from.getTime(), to.getTime()) };
   });
+}
+
+/** Client cancels their own order (only before pickup). */
+export function cancelOrder(
+  state: DemoState,
+  orderId: string,
+  clientId: string,
+): { state: DemoState; error?: string } {
+  const order = state.orders.find((o) => o.id === orderId);
+  if (!order) return { state, error: "Order not found" };
+  if (order.client_id !== clientId) return { state, error: "This is not your order" };
+  if (!["pending", "accepted"].includes(order.status)) {
+    return { state, error: "This order can no longer be cancelled" };
+  }
+  const orders = state.orders.map((o) =>
+    o.id === orderId ? { ...o, status: "cancelled" as OrderStatus } : o,
+  );
+  const drivers = state.drivers.map((d) =>
+    d.id === order.assigned_driver_id ? { ...d, is_busy: false } : d,
+  );
+  return { state: { ...state, orders, drivers } };
 }
 
 export function rejectOrder(

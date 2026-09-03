@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Store } from "lucide-react";
+import { Store, CircleDollarSign } from "lucide-react";
+import { formatDeliveryCash, withBusinessOrderCosts } from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
 import {
   DeliveryMap,
@@ -12,7 +13,7 @@ import {
   useMapsAvailable,
 } from "@/components/delivery-map";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
@@ -31,7 +32,7 @@ export default function AdminBusinessesPage() {
 
 function BusinessesContent() {
   const { isAdmin } = useAuth();
-  const { state, updateProfile } = useStore();
+  const { state, updateProfile, updateBusinessOrderCosts } = useStore();
   const { dict } = useI18n();
   const mapsAvailable = useMapsAvailable();
 
@@ -43,6 +44,11 @@ function BusinessesContent() {
   const [address, setAddress] = useState("");
   const [pin, setPin] = useState(DEFAULT_PIN);
 
+  const [minUsd, setMinUsd] = useState("");
+  const [maxUsd, setMaxUsd] = useState("");
+  const [minLbp, setMinLbp] = useState("");
+  const [maxLbp, setMaxLbp] = useState("");
+
   useEffect(() => {
     if (!selected) return;
     setAddress(selected.business_address ?? "");
@@ -50,6 +56,11 @@ function BusinessesContent() {
       lat: selected.business_lat ?? DEFAULT_PIN.lat,
       lng: selected.business_lng ?? DEFAULT_PIN.lng,
     });
+    const costs = withBusinessOrderCosts(selected);
+    setMinUsd(String(costs.order_min_usd));
+    setMaxUsd(String(costs.order_max_usd));
+    setMinLbp(String(costs.order_min_lbp));
+    setMaxLbp(String(costs.order_max_lbp));
   }, [selected]);
 
   if (!isAdmin) {
@@ -60,11 +71,12 @@ function BusinessesContent() {
     );
   }
 
-  function onSave(e: React.FormEvent) {
+  async function onSaveLocation(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
+    const resolvedAddress = address.trim() || await reverseGeocode(pin.lat, pin.lng);
     const err = updateProfile(selected.id, {
-      business_address: address.trim() || `${pin.lat.toFixed(4)}, ${pin.lng.toFixed(4)}`,
+      business_address: resolvedAddress,
       business_lat: pin.lat,
       business_lng: pin.lng,
     });
@@ -73,6 +85,22 @@ function BusinessesContent() {
       return;
     }
     toast.success(dict.admin.locationSaved);
+  }
+
+  function onSaveCosts(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    const err = updateBusinessOrderCosts(selected.id, {
+      order_min_usd: Number(minUsd),
+      order_max_usd: Number(maxUsd),
+      order_min_lbp: Number(minLbp),
+      order_max_lbp: Number(maxLbp),
+    });
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    toast.success(dict.admin.costsSaved);
   }
 
   return (
@@ -89,23 +117,30 @@ function BusinessesContent() {
         ) : (
           <>
             <div className="grid gap-3">
-              {businesses.map((b) => (
-                <button
-                  key={b.id}
-                  type="button"
-                  onClick={() => setSelectedId(b.id)}
-                  className={`touch-target rounded-xl border-2 p-4 text-start transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
-                    selected?.id === b.id
-                      ? "border-foreground bg-muted"
-                      : "border-border hover:bg-muted/60"
-                  }`}
-                >
-                  <p className="text-lg font-semibold">{b.business_name || b.full_name}</p>
-                  <p className="text-base text-muted-foreground">
-                    {b.business_address?.trim() || dict.auth.pinRequired}
-                  </p>
-                </button>
-              ))}
+              {businesses.map((b) => {
+                const costs = withBusinessOrderCosts(b);
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setSelectedId(b.id)}
+                    className={`touch-target rounded-xl border-2 p-4 text-start transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+                      selected?.id === b.id
+                        ? "border-foreground bg-muted"
+                        : "border-border hover:bg-muted/60"
+                    }`}
+                  >
+                    <p className="text-lg font-semibold">{b.business_name || b.full_name}</p>
+                    <p className="text-base text-muted-foreground">
+                      {b.business_address?.trim() || dict.auth.pinRequired}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {formatDeliveryCash(costs.order_min_usd, costs.order_min_lbp)} –{" "}
+                      {formatDeliveryCash(costs.order_max_usd, costs.order_max_lbp)}
+                    </p>
+                  </button>
+                );
+              })}
             </div>
 
             {selected ? (
@@ -117,7 +152,7 @@ function BusinessesContent() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
-                  <form onSubmit={onSave} className="flex flex-col gap-4">
+                  <form onSubmit={onSaveLocation} className="flex flex-col gap-4">
                     <div className="flex flex-col gap-2">
                       <Label htmlFor="biz-address">{dict.admin.address}</Label>
                       {mapsAvailable ? (
@@ -161,6 +196,24 @@ function BusinessesContent() {
                     }}
                     routeHint={dict.admin.shopPinHint}
                   />
+
+                  {/* Order Costs */}
+                  <div className="border-t pt-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <CircleDollarSign className="size-5 text-muted-foreground" />
+                      <h3 className="text-xl font-semibold">{dict.admin.orderCostsTitle}</h3>
+                    </div>
+                    <p className="mb-4 text-base text-muted-foreground">{dict.admin.orderCostsBody}</p>
+                    <form onSubmit={onSaveCosts} className="grid gap-4 sm:grid-cols-2">
+                      <CostField id="min-usd" label={dict.admin.minUsd} value={minUsd} onChange={setMinUsd} />
+                      <CostField id="max-usd" label={dict.admin.maxUsd} value={maxUsd} onChange={setMaxUsd} />
+                      <CostField id="min-lbp" label={dict.admin.minLbp} value={minLbp} onChange={setMinLbp} step="1000" />
+                      <CostField id="max-lbp" label={dict.admin.maxLbp} value={maxLbp} onChange={setMaxLbp} step="1000" />
+                      <Button type="submit" size="lg" className="touch-target w-fit rounded-full px-6 sm:col-span-2">
+                        {dict.admin.saveCosts}
+                      </Button>
+                    </form>
+                  </div>
                 </CardContent>
               </Card>
             ) : null}
@@ -168,5 +221,38 @@ function BusinessesContent() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+function CostField({
+  id,
+  label,
+  value,
+  onChange,
+  step = "0.01",
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  step?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id} className="text-lg">
+        {label}
+      </Label>
+      <Input
+        id={id}
+        type="number"
+        step={step}
+        min={0}
+        inputMode="decimal"
+        className="h-12 text-lg"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required
+      />
+    </div>
   );
 }

@@ -57,11 +57,12 @@ function WarehousesContent() {
     );
   }
 
-  function onAddWarehouse(e: React.FormEvent) {
+  async function onAddWarehouse(e: React.FormEvent) {
     e.preventDefault();
+    const resolvedAddress = address.trim() || await reverseGeocode(pin.lat, pin.lng);
     addWarehouse({
       name: name.trim(),
-      address: address.trim() || `${pin.lat.toFixed(4)}, ${pin.lng.toFixed(4)}`,
+      address: resolvedAddress,
       lat: pin.lat,
       lng: pin.lng,
     });
