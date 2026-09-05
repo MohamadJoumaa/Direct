@@ -36,7 +36,7 @@ type StoreContextValue = {
       product_description: string;
       order_type: OrderType;
     },
-  ) => string | undefined;
+  ) => { error?: string; orderNumber?: number };
   claimOrder: (orderId: string, driverId: string) => string | undefined;
   advanceOrder: (
     orderId: string,
@@ -102,6 +102,10 @@ type StoreContextValue = {
     driver_type: DriverType;
   }) => string | undefined;
   removeDriver: (driverId: string) => string | undefined;
+  setDriverAccountAction: (
+    driverId: string,
+    action: demo.DriverAccountAction,
+  ) => string | undefined;
   addWarehouse: (input: { name: string; address: string; lat: number; lng: number }) => void;
   removeWarehouse: (warehouseId: string) => string | undefined;
   addWarehouseProduct: (input: {
@@ -151,8 +155,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setViewingAs: (role) => commit({ ...state, viewingAs: role }),
       createOrder: (clientId, input) => {
         const r = demo.createOrder(state, clientId, input);
-        if (r.error) return r.error;
+        if (r.error) return { error: r.error };
         commit(r.state);
+        return { orderNumber: r.order?.order_number };
       },
       claimOrder: (orderId, driverId) => {
         const r = demo.claimOrder(state, orderId, driverId);
@@ -226,6 +231,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       removeDriver: (driverId) => {
         const r = demo.removeDriver(state, driverId);
+        if (r.error) return r.error;
+        commit(r.state);
+      },
+      setDriverAccountAction: (driverId, action) => {
+        const r = demo.setDriverAccountAction(state, driverId, action);
         if (r.error) return r.error;
         commit(r.state);
       },

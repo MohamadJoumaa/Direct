@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { Menu } from "lucide-react";
 import { WHISH_NUMBER } from "@direct/shared";
-import { driverCommissionTotals, driverDailyProfit, driverRevenue } from "@/lib/demo-store";
+import { driverCommissionTotals, driverDailyProfit, driverRevenue, formatOrderNumber } from "@/lib/demo-store";
 import { AppShell } from "@/components/app-shell";
+import { LinkButton } from "@/components/link-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -313,10 +314,22 @@ export default function DriverDashboardPage() {
               history.map((o) => (
                 <div
                   key={o.id}
-                  className="flex justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-base"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-base"
                 >
-                  <span>{o.product_description}</span>
-                  <span className="font-semibold">${o.driver_cut_usd.toFixed(2)}</span>
+                  <span>
+                    {formatOrderNumber(o.order_number)} · {o.product_description}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold">${o.driver_cut_usd.toFixed(2)}</span>
+                    <LinkButton
+                      href={`/app/driver/orders/${o.id}`}
+                      variant="outline"
+                      size="lg"
+                      className="touch-target"
+                    >
+                      {dict.driver.openDetails}
+                    </LinkButton>
+                  </div>
                 </div>
               ))
             )}

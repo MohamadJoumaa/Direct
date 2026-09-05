@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
+import { locationLabel } from "@/lib/place-name";
 
 const DEFAULT_PIN = { lat: 33.8938, lng: 35.5018 };
 
@@ -51,7 +52,11 @@ function BusinessesContent() {
 
   useEffect(() => {
     if (!selected) return;
-    setAddress(selected.business_address ?? "");
+    setAddress(
+      selected.business_address?.trim()
+        ? locationLabel(selected.business_address, selected.business_lat, selected.business_lng)
+        : "",
+    );
     setPin({
       lat: selected.business_lat ?? DEFAULT_PIN.lat,
       lng: selected.business_lng ?? DEFAULT_PIN.lng,
@@ -132,7 +137,9 @@ function BusinessesContent() {
                   >
                     <p className="text-lg font-semibold">{b.business_name || b.full_name}</p>
                     <p className="text-base text-muted-foreground">
-                      {b.business_address?.trim() || dict.auth.pinRequired}
+                      {b.business_address?.trim()
+                        ? locationLabel(b.business_address, b.business_lat, b.business_lng)
+                        : dict.auth.pinRequired}
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {formatDeliveryCash(costs.order_min_usd, costs.order_min_lbp)} –{" "}
@@ -187,6 +194,7 @@ function BusinessesContent() {
                         lat: pin.lat,
                         lng: pin.lng,
                         label: selected.business_name || selected.full_name,
+                        place: address,
                         kind: "pickup",
                       },
                     ]}

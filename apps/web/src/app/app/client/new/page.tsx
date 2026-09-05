@@ -28,6 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
 import { fmt, useI18n } from "@/lib/i18n";
+import { locationLabel } from "@/lib/place-name";
 import { cn } from "@/lib/utils";
 
 const PRESETS = [
@@ -159,7 +160,7 @@ function NewOrderContent() {
       toast.error(dict.order.missingShop);
       return;
     }
-    const err = createOrder(user.id, {
+    const result = createOrder(user.id, {
       pickup_address: pickup.address,
       pickup_lat: pickup.lat,
       pickup_lng: pickup.lng,
@@ -169,11 +170,11 @@ function NewOrderContent() {
       product_description: product,
       order_type: orderType,
     });
-    if (err) {
-      toast.error(err);
+    if (result.error) {
+      toast.error(result.error);
       return;
     }
-    toast.success(dict.order.placedToast);
+    toast.success(fmt(dict.order.placedToast, { number: result.orderNumber ?? "" }));
     router.push("/app/client");
   }
 
@@ -261,7 +262,7 @@ function NewOrderContent() {
                   </Label>
                   <Input
                     className="h-12 text-lg"
-                    value={pickup.address}
+                    value={locationLabel(pickup.address, pickup.lat, pickup.lng)}
                     onChange={(e) => setPickup((p) => ({ ...p, address: e.target.value }))}
                     readOnly={isBusiness}
                   />
@@ -270,7 +271,7 @@ function NewOrderContent() {
                   <Label className="text-lg">{dict.order.dropoffAddress}</Label>
                   <Input
                     className="h-12 text-lg"
-                    value={dropoff.address}
+                    value={locationLabel(dropoff.address, dropoff.lat, dropoff.lng)}
                     onChange={(e) => setDropoff((p) => ({ ...p, address: e.target.value }))}
                   />
                 </div>
@@ -427,10 +428,12 @@ function NewOrderContent() {
               </CardHeader>
               <CardContent className="flex flex-col gap-4 text-lg">
                 <p>
-                  <strong>{dict.common.from}:</strong> {pickup.address}
+                  <strong>{dict.common.from}:</strong>{" "}
+                  {locationLabel(pickup.address, pickup.lat, pickup.lng)}
                 </p>
                 <p>
-                  <strong>{dict.common.to}:</strong> {dropoff.address}
+                  <strong>{dict.common.to}:</strong>{" "}
+                  {locationLabel(dropoff.address, dropoff.lat, dropoff.lng)}
                 </p>
                 <p>
                   <strong>{dict.common.item}:</strong> {product}
@@ -475,6 +478,7 @@ function NewOrderContent() {
                 lat: pickup.lat,
                 lng: pickup.lng,
                 label: dict.order.pickupAddress,
+                place: pickup.address,
                 kind: "pickup",
               },
               {
@@ -482,6 +486,7 @@ function NewOrderContent() {
                 lat: dropoff.lat,
                 lng: dropoff.lng,
                 label: dict.order.dropoffAddress,
+                place: dropoff.address,
                 kind: "dropoff",
               },
               ...nearby,

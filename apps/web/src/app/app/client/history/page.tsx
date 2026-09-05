@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { formatDeliveryCash } from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
+import { formatOrderNumber } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { orderTypeLabel, useI18n } from "@/lib/i18n";
 
@@ -38,6 +40,7 @@ export default function ClientHistoryPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="text-base">{dict.common.orderNumber}</TableHead>
                   <TableHead className="text-base">{dict.common.item}</TableHead>
                   <TableHead className="text-base">{dict.common.type}</TableHead>
                   <TableHead className="text-base">{dict.client.paid}</TableHead>
@@ -46,8 +49,16 @@ export default function ClientHistoryPage() {
               </TableHeader>
               <TableBody>
                 {history.map((o) => (
-                  <TableRow key={o.id}>
-                    <TableCell className="text-base">{o.product_description}</TableCell>
+                    <TableRow key={o.id}>
+                      <TableCell className="font-mono text-base font-semibold tabular-nums">
+                        <Link
+                          href={`/app/client/orders/${o.id}`}
+                          className="underline-offset-4 hover:underline"
+                        >
+                          {formatOrderNumber(o.order_number)}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-base">{o.product_description}</TableCell>
                     <TableCell>
                       <Badge>{orderTypeLabel(o.order_type, dict)}</Badge>
                     </TableCell>

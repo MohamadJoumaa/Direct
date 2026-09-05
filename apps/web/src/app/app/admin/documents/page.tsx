@@ -1,13 +1,15 @@
 "use client";
 
-import Image from "next/image";
 import { toast } from "sonner";
-import { FileText, Phone, User } from "lucide-react";
+import { FileText, Phone } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { DocumentAttachment } from "@/components/document-attachment";
+import { ProfilePhoto } from "@/components/profile-photo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
+import { profilePhotoUrl } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
 
@@ -59,20 +61,11 @@ export default function AdminDocumentsPage() {
               <Card key={driverId} className="border-2">
                 <CardHeader>
                   <div className="flex flex-wrap items-center gap-3">
-                    {profile?.avatar_url ? (
-                      <Image
-                        src={profile.avatar_url}
-                        alt=""
-                        width={48}
-                        height={48}
-                        className="size-12 rounded-full object-cover"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-                        <User className="size-5 text-muted-foreground" />
-                      </div>
-                    )}
+                    <ProfilePhoto
+                      src={profilePhotoUrl(state, driverId)}
+                      name={profile?.full_name ?? "Driver"}
+                      className="size-12"
+                    />
                     <div className="min-w-0">
                       <CardTitle className="flex items-center gap-2 text-xl">
                         {profile?.full_name ?? "Unknown"}
@@ -92,7 +85,7 @@ export default function AdminDocumentsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-3">
                     {DOC_TYPE_ORDER.map((docType) => {
                       const doc = docs.find((d) => d.doc_type === docType);
                       if (!doc) return null;
@@ -101,7 +94,7 @@ export default function AdminDocumentsPage() {
                           key={doc.id}
                           className="flex flex-col gap-3 rounded-xl border p-4"
                         >
-                          <div className="flex items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-base font-semibold">{docLabels[docType]}</p>
                             <Badge
                               variant={
@@ -116,23 +109,18 @@ export default function AdminDocumentsPage() {
                               {doc.status}
                             </Badge>
                           </div>
-                          {doc.file_data ? (
-                            <Image
-                              src={doc.file_data}
-                              alt={docLabels[docType]}
-                              width={200}
-                              height={200}
-                              className="w-full rounded-lg border object-cover"
-                              unoptimized
+                          <div className="flex flex-wrap items-center gap-3">
+                            <DocumentAttachment
+                              label={docLabels[docType]}
+                              fileName={doc.file_name}
+                              fileData={doc.file_data}
+                              openLabel={dict.admin.openAttachment}
+                              noPreview={dict.admin.noPreview}
                             />
-                          ) : (
-                            <div className="flex h-32 items-center justify-center rounded-lg border border-dashed bg-muted/50">
-                              <p className="text-sm text-muted-foreground">{doc.file_name}</p>
-                            </div>
-                          )}
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(doc.created_at).toLocaleDateString()}
-                          </p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(doc.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
                           {doc.status === "pending" ? (
                             <div className="flex gap-2">
                               <Button

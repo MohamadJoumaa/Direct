@@ -4,13 +4,15 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
-import { formatDeliveryCash, ORDER_TYPE_LABELS } from "@direct/shared";
+import { formatDeliveryCash } from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
 import { DeliveryMap } from "@/components/delivery-map";
-import { Badge } from "@/components/ui/badge";
+import { OrderReceipt } from "@/components/order-receipt";
+import { ProfilePhoto } from "@/components/profile-photo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
+import { formatOrderNumber, profilePhotoUrl } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
 
@@ -49,7 +51,7 @@ export default function AdminOrderDetailPage() {
     (order.status === "at_warehouse" && order.order_type === "long_distance");
 
   return (
-    <AppShell title={dict.admin.orderDetail}>
+    <AppShell title={`${dict.common.orderNumber} ${formatOrderNumber(order.order_number)}`}>
       <div className="flex flex-col gap-6">
         <Link
           href="/app/admin"
@@ -59,48 +61,38 @@ export default function AdminOrderDetailPage() {
           {dict.admin.allOrders}
         </Link>
 
-        <Card className="border-2">
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
-            <CardTitle className="text-2xl">{order.product_description}</CardTitle>
-            <Badge className="text-sm">{ORDER_TYPE_LABELS[order.order_type]}</Badge>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2 text-lg">
-            <p>
-              <strong>{dict.common.status}:</strong>{" "}
-              <span className="capitalize">{order.status.replaceAll("_", " ")}</span>
-            </p>
-            <p>
-              <strong>{dict.common.from}:</strong> {order.pickup_address}
-            </p>
-            <p>
-              <strong>{dict.common.to}:</strong> {order.dropoff_address}
-            </p>
-            {warehouse ? (
+        <OrderReceipt
+          order={order}
+          warehouse={warehouse}
+          cashLabel={dict.common.fee}
+          cashValue={formatDeliveryCash(order.delivery_fee_usd, order.delivery_fee_lbp)}
+          extraCashLines={[
+            { label: dict.common.driverPay, value: `$${order.driver_cut_usd.toFixed(2)}` },
+            { label: dict.common.companyCut, value: `$${order.company_cut_usd.toFixed(2)}` },
+          ]}
+          people={
+            <div className="flex flex-col gap-3">
               <p>
-                <strong>{dict.nav.warehouses}:</strong> {warehouse.name} — {warehouse.address}
+                <strong>{dict.common.client}:</strong> {client?.full_name} · {client?.phone}
               </p>
-            ) : null}
-            <p>
-              <strong>{dict.common.client}:</strong> {client?.full_name} · {client?.phone}
-            </p>
-            <p>
-              <strong>{dict.common.driver}:</strong>{" "}
-              {driverProfile
-                ? `${driverProfile.full_name}${adminIsDriver ? " (you)" : ""} · ${driverProfile.phone}`
-                : "—"}
-            </p>
-            <p>
-              <strong>{dict.common.fee}:</strong>{" "}
-              {formatDeliveryCash(order.delivery_fee_usd, order.delivery_fee_lbp)} (driver $
-              {order.driver_cut_usd.toFixed(2)} / company ${order.company_cut_usd.toFixed(2)})
-            </p>
-            {order.eta_minutes ? (
-              <p>
-                <strong>{dict.common.eta}:</strong> ~{order.eta_minutes} {dict.common.minutes}
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
+              <div className="flex items-center gap-3 rounded-xl border-2 bg-muted/40 p-3">
+                {driverProfile ? (
+                  <ProfilePhoto
+                    src={profilePhotoUrl(state, driverProfile.id)}
+                    name={driverProfile.full_name}
+                    className="size-12"
+                  />
+                ) : null}
+                <p>
+                  <strong>{dict.common.driver}:</strong>{" "}
+                  {driverProfile
+                    ? `${driverProfile.full_name}${adminIsDriver ? " (you)" : ""} · ${driverProfile.phone}`
+                    : "—"}
+                </p>
+              </div>
+            </div>
+          }
+        />
 
         <Card className="border-2">
           <CardHeader>
@@ -224,6 +216,7 @@ export default function AdminOrderDetailPage() {
               lat: order.pickup_lat,
               lng: order.pickup_lng,
               label: "Pickup",
+              place: order.pickup_address,
               kind: "pickup",
             },
             ...(warehouse
@@ -233,6 +226,7 @@ export default function AdminOrderDetailPage() {
                     lat: warehouse.lat,
                     lng: warehouse.lng,
                     label: warehouse.name,
+                    place: warehouse.address,
                     kind: "warehouse" as const,
                   },
                 ]
@@ -242,6 +236,7 @@ export default function AdminOrderDetailPage() {
               lat: order.dropoff_lat,
               lng: order.dropoff_lng,
               label: "Drop-off",
+              place: order.dropoff_address,
               kind: "dropoff",
             },
           ]}

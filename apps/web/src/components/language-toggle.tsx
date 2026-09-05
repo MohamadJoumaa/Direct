@@ -10,7 +10,7 @@ export function LanguageToggle() {
     <Button
       variant="ghost"
       className="touch-target rounded-full px-3 font-semibold"
-      aria-label={lang === "en" ? "التبديل إلى العربية" : "Switch to English"}
+      aria-label={lang === "en" ? "عرض الموقع بالعربية" : "Switch to English"}
       onClick={toggleLang}
     >
       <Languages className="size-5" />

@@ -17,8 +17,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
+import { formatOrderNumber } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
+import { locationLabel } from "@/lib/place-name";
 
 const DEFAULT_PIN = { lat: 33.8938, lng: 35.5018 };
 
@@ -145,9 +147,10 @@ function WarehousesContent() {
                     lat: w.lat,
                     lng: w.lng,
                     label: w.name,
+                    place: w.address,
                     kind: "warehouse" as const,
                   })),
-                  { id: "new-pin", ...pin, label: dict.admin.addWarehouse, kind: "pickup" as const },
+                  { id: "new-pin", ...pin, label: dict.admin.addWarehouse, place: address, kind: "pickup" as const },
                 ]}
                 onMapClick={async (lat, lng) => {
                   setPin({ lat, lng });
@@ -165,7 +168,9 @@ function WarehousesContent() {
                 <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
                   <div>
                     <CardTitle className="text-2xl">{w.name}</CardTitle>
-                    <p className="mt-1 text-base text-muted-foreground">{w.address}</p>
+                    <p className="mt-1 text-base text-muted-foreground">
+                      {locationLabel(w.address, w.lat, w.lng)}
+                    </p>
                   </div>
                   <Button
                     size="sm"
@@ -190,7 +195,11 @@ function WarehousesContent() {
                     <p className="text-base text-muted-foreground">{dict.admin.noProducts}</p>
                   ) : (
                     <ul className="flex flex-col gap-2">
-                      {products.map((p) => (
+                      {products.map((p) => {
+                        const linkedOrder = p.order_id
+                          ? state.orders.find((o) => o.id === p.order_id)
+                          : null;
+                        return (
                         <li
                           key={p.id}
                           className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2"
@@ -198,9 +207,9 @@ function WarehousesContent() {
                           <div className="flex items-center gap-2">
                             <span className="text-base font-medium">{p.name}</span>
                             <Badge variant="secondary">×{p.quantity}</Badge>
-                            {p.order_id ? (
+                            {linkedOrder ? (
                               <Badge variant="outline" className="text-xs">
-                                {dict.common.orders}: {p.order_id.slice(0, 8)}
+                                {dict.common.orderNumber} {formatOrderNumber(linkedOrder.order_number)}
                               </Badge>
                             ) : null}
                           </div>
@@ -219,7 +228,8 @@ function WarehousesContent() {
                             </Button>
                           </div>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )}
 

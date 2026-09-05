@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { DRIVER_TYPE_LABELS, WHISH_NUMBER } from "@direct/shared";
-import { availableOrdersForDriver, driverCommissionTotals } from "@/lib/demo-store";
+import { availableOrdersForDriver, driverCommissionTotals, formatOrderNumber } from "@/lib/demo-store";
 import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { DeliveryMap } from "@/components/delivery-map";
@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
 import { orderTypeLabel, useI18n, fmt } from "@/lib/i18n";
+import { locationLabel } from "@/lib/place-name";
 import { nextNavStop, openDrivingDirections } from "@/lib/maps-nav";
 
 export default function DriverHomePage() {
@@ -34,6 +35,8 @@ export default function DriverHomePage() {
           rating_count: 0,
           subscription_status: "active" as const,
           subscription_ends_at: null,
+          admin_frozen: false,
+          banned: false,
         }
       : null);
 
@@ -85,6 +88,22 @@ export default function DriverHomePage() {
   return (
     <AppShell title={dict.nav.ordersTab}>
       <div className="flex flex-col gap-6">
+        {!isAdmin && driver.banned ? (
+          <Alert variant="destructive" className="border-2">
+            <AlertTitle className="text-xl">{dict.driver.accountBanned}</AlertTitle>
+            <AlertDescription className="text-lg">{dict.driver.accountBannedBody}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {!isAdmin && !driver.banned && driver.admin_frozen ? (
+          <Alert variant="destructive" className="border-2">
+            <AlertTitle className="text-xl">{dict.driver.accountFrozenAdmin}</AlertTitle>
+            <AlertDescription className="text-lg">
+              {dict.driver.accountFrozenAdminBody}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
         {!isAdmin && percentageMode && commissionDue > 0 ? (
           <Alert className="border-2 border-destructive">
             <AlertTitle className="text-xl">{dict.driver.commissionDue}</AlertTitle>
@@ -174,7 +193,12 @@ export default function DriverHomePage() {
             active.map((o) => (
               <Card key={o.id} className="border-2">
                 <CardHeader className="flex flex-row justify-between gap-2">
-                  <CardTitle className="text-xl">{o.product_description}</CardTitle>
+                  <div>
+                    <p className="font-mono text-sm font-semibold tabular-nums text-muted-foreground">
+                      {formatOrderNumber(o.order_number)}
+                    </p>
+                    <CardTitle className="text-xl">{o.product_description}</CardTitle>
+                  </div>
                   <Badge>{orderTypeLabel(o.order_type, dict)}</Badge>
                 </CardHeader>
                 <CardContent className="flex flex-wrap items-center justify-between gap-3">
@@ -213,11 +237,15 @@ export default function DriverHomePage() {
             available.map((o) => (
               <Card key={o.id} className="border-2 border-primary/30">
                 <CardHeader>
+                  <p className="font-mono text-sm font-semibold tabular-nums text-muted-foreground">
+                    {formatOrderNumber(o.order_number)}
+                  </p>
                   <CardTitle className="text-xl">{o.product_description}</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3 text-lg">
                   <p>
-                    {o.pickup_address} → {o.dropoff_address}
+                    {locationLabel(o.pickup_address, o.pickup_lat, o.pickup_lng)} →{" "}
+                    {locationLabel(o.dropoff_address, o.dropoff_lat, o.dropoff_lng)}
                   </p>
                   <p>
                     {orderTypeLabel(o.order_type, dict)} · ${o.driver_cut_usd.toFixed(2)}

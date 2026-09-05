@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -20,6 +21,12 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
+import type { Order } from "@/lib/demo-store";
+import { formatOrderNumber } from "@/lib/demo-store";
+
+function orderDriverId(order: Order) {
+  return order.long_distance_driver_id ?? order.assigned_driver_id;
+}
 
 export default function AdminOrdersPage() {
   const router = useRouter();
@@ -43,6 +50,17 @@ export default function AdminOrdersPage() {
     ["completed", "cancelled", "disputed"].includes(o.status),
   );
 
+  function detailsLink(orderId: string) {
+    return (
+      <Link
+        href={`/app/admin/orders/${orderId}`}
+        className="touch-target inline-flex items-center rounded-full border-2 px-4 py-1.5 text-sm font-semibold transition-colors hover:bg-muted"
+      >
+        {dict.admin.details}
+      </Link>
+    );
+  }
+
   return (
     <AppShell title="Admin">
       <div className="flex flex-col gap-8">
@@ -53,191 +71,157 @@ export default function AdminOrdersPage() {
           </LinkButton>
         </div>
 
-        <Card className="border-2">
-          <CardHeader>
-            <CardTitle className="text-2xl">{dict.admin.pendingOrders}</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{dict.common.item}</TableHead>
-                  <TableHead>{dict.common.type}</TableHead>
-                  <TableHead>{dict.common.client}</TableHead>
-                  <TableHead>{dict.common.status}</TableHead>
-                  <TableHead>{dict.common.fee}</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pending.map((o) => {
-                  const client = state.profiles.find((p) => p.id === o.client_id);
-                  return (
-                    <TableRow key={o.id}>
-                      <TableCell className="text-base">{o.product_description}</TableCell>
-                      <TableCell>
-                        <Badge>{ORDER_TYPE_LABELS[o.order_type]}</Badge>
-                      </TableCell>
-                      <TableCell className="text-base">
-                        {client?.full_name}
-                        <br />
-                        <span className="text-muted-foreground">{client?.phone}</span>
-                      </TableCell>
-                      <TableCell className="capitalize">{o.status.replaceAll("_", " ")}</TableCell>
-                      <TableCell>
-                        {formatDeliveryCash(o.delivery_fee_usd, o.delivery_fee_lbp)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap justify-end gap-2">
-                          <Link
-                            href={`/app/admin/orders/${o.id}`}
-                            className="touch-target inline-flex items-center rounded-full border-2 px-4 py-1.5 text-sm font-semibold transition-colors hover:bg-muted"
-                          >
-                            {dict.admin.details}
-                          </Link>
-                          <Button
-                            size="sm"
-                            className="touch-target"
-                            onClick={() => {
-                              const err = claimOrder(o.id, user.id);
-                              if (err) {
-                                toast.error(err);
-                                return;
-                              }
-                              router.push(`/app/admin/orders/${o.id}`);
-                            }}
-                          >
-                            {dict.admin.takeOrder}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            className="touch-target"
-                            onClick={() => {
-                              const err = rejectOrder(o.id);
-                              if (err) toast.error(err);
-                              else toast.success(dict.admin.rejectedToast);
-                            }}
-                          >
-                            {dict.admin.reject}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {pending.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-muted-foreground">
-                      {dict.admin.noPending}
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <OrdersTable
+          title={dict.admin.pendingOrders}
+          empty={dict.admin.noPending}
+          orders={pending}
+          profiles={state.profiles}
+          headers={{
+            number: dict.common.orderNumber,
+            item: dict.common.item,
+            type: dict.common.type,
+            driver: dict.common.driver,
+            status: dict.common.status,
+            fee: dict.common.fee,
+          }}
+          actions={(o) => (
+            <div className="flex flex-wrap justify-end gap-2">
+              {detailsLink(o.id)}
+              <Button
+                size="sm"
+                className="touch-target"
+                onClick={() => {
+                  const err = claimOrder(o.id, user.id);
+                  if (err) {
+                    toast.error(err);
+                    return;
+                  }
+                  router.push(`/app/admin/orders/${o.id}`);
+                }}
+              >
+                {dict.admin.takeOrder}
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="touch-target"
+                onClick={() => {
+                  const err = rejectOrder(o.id);
+                  if (err) toast.error(err);
+                  else toast.success(dict.admin.rejectedToast);
+                }}
+              >
+                {dict.admin.reject}
+              </Button>
+            </div>
+          )}
+        />
 
-        <Card className="border-2">
-          <CardHeader>
-            <CardTitle className="text-2xl">{dict.admin.ongoingOrders}</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{dict.common.item}</TableHead>
-                  <TableHead>{dict.common.type}</TableHead>
-                  <TableHead>{dict.common.driver}</TableHead>
-                  <TableHead>{dict.common.status}</TableHead>
-                  <TableHead>{dict.common.fee}</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ongoing.map((o) => {
-                  const driverId = o.long_distance_driver_id ?? o.assigned_driver_id;
-                  const driver = driverId
-                    ? state.profiles.find((p) => p.id === driverId)
-                    : null;
-                  return (
-                    <TableRow key={o.id}>
-                      <TableCell>{o.product_description}</TableCell>
-                      <TableCell>
-                        <Badge>{ORDER_TYPE_LABELS[o.order_type]}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {driver?.full_name ?? "—"}
-                        <br />
-                        <span className="text-muted-foreground">{driver?.phone}</span>
-                      </TableCell>
-                      <TableCell className="capitalize">{o.status.replaceAll("_", " ")}</TableCell>
-                      <TableCell>
-                        {formatDeliveryCash(o.delivery_fee_usd, o.delivery_fee_lbp)}
-                      </TableCell>
-                      <TableCell className="text-end">
-                        <Link
-                          href={`/app/admin/orders/${o.id}`}
-                          className="touch-target inline-flex items-center rounded-full border-2 px-4 py-1.5 text-sm font-semibold transition-colors hover:bg-muted"
-                        >
-                          {dict.admin.details}
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {ongoing.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-muted-foreground">
-                      {dict.admin.noOngoing}
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <OrdersTable
+          title={dict.admin.ongoingOrders}
+          empty={dict.admin.noOngoing}
+          orders={ongoing}
+          profiles={state.profiles}
+          headers={{
+            number: dict.common.orderNumber,
+            item: dict.common.item,
+            type: dict.common.type,
+            driver: dict.common.driver,
+            status: dict.common.status,
+            fee: dict.common.fee,
+          }}
+          actions={(o) => <div className="text-end">{detailsLink(o.id)}</div>}
+        />
 
-        <Card className="border-2">
-          <CardHeader>
-            <CardTitle className="text-2xl">{dict.admin.historyOrders}</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{dict.common.item}</TableHead>
-                  <TableHead>{dict.common.client}</TableHead>
-                  <TableHead>{dict.common.status}</TableHead>
-                  <TableHead>Driver cut</TableHead>
-                  <TableHead>Company cut</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {history.map((o) => {
-                  const client = state.profiles.find((p) => p.id === o.client_id);
-                  return (
-                    <TableRow key={o.id}>
-                      <TableCell>{o.product_description}</TableCell>
-                      <TableCell>{client?.full_name}</TableCell>
-                      <TableCell className="capitalize">{o.status}</TableCell>
-                      <TableCell>${o.driver_cut_usd.toFixed(2)}</TableCell>
-                      <TableCell>${o.company_cut_usd.toFixed(2)}</TableCell>
-                    </TableRow>
-                  );
-                })}
-                {history.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
-                      {dict.admin.noHistory}
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <OrdersTable
+          title={dict.admin.historyOrders}
+          empty={dict.admin.noHistory}
+          orders={history}
+          profiles={state.profiles}
+          headers={{
+            number: dict.common.orderNumber,
+            item: dict.common.item,
+            type: dict.common.type,
+            driver: dict.common.driver,
+            status: dict.common.status,
+            fee: dict.common.fee,
+          }}
+          actions={(o) => <div className="text-end">{detailsLink(o.id)}</div>}
+        />
       </div>
     </AppShell>
+  );
+}
+
+function OrdersTable({
+  title,
+  empty,
+  orders,
+  profiles,
+  headers,
+  actions,
+}: {
+  title: string;
+  empty: string;
+  orders: Order[];
+  profiles: { id: string; full_name: string; phone: string }[];
+  headers: { number: string; item: string; type: string; driver: string; status: string; fee: string };
+  actions: (order: Order) => ReactNode;
+}) {
+  return (
+    <Card className="border-2">
+      <CardHeader>
+        <CardTitle className="text-2xl">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{headers.number}</TableHead>
+              <TableHead>{headers.item}</TableHead>
+              <TableHead>{headers.type}</TableHead>
+              <TableHead>{headers.driver}</TableHead>
+              <TableHead>{headers.status}</TableHead>
+              <TableHead>{headers.fee}</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {orders.map((o) => {
+              const driverId = orderDriverId(o);
+              const driver = driverId ? profiles.find((p) => p.id === driverId) : null;
+              return (
+                <TableRow key={o.id}>
+                  <TableCell className="font-mono text-base font-semibold tabular-nums">
+                    {formatOrderNumber(o.order_number)}
+                  </TableCell>
+                  <TableCell className="text-base">{o.product_description}</TableCell>
+                  <TableCell>
+                    <Badge>{ORDER_TYPE_LABELS[o.order_type]}</Badge>
+                  </TableCell>
+                  <TableCell className="text-base">
+                    {driver?.full_name ?? "—"}
+                    <br />
+                    <span className="text-muted-foreground">{driver?.phone}</span>
+                  </TableCell>
+                  <TableCell className="capitalize">{o.status.replaceAll("_", " ")}</TableCell>
+                  <TableCell>
+                    {formatDeliveryCash(o.delivery_fee_usd, o.delivery_fee_lbp)}
+                  </TableCell>
+                  <TableCell>{actions(o)}</TableCell>
+                </TableRow>
+              );
+            })}
+            {orders.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-muted-foreground">
+                  {empty}
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }

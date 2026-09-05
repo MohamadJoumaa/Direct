@@ -19,6 +19,7 @@ import {
   Shield,
   FileText,
 } from "lucide-react";
+import { ProfilePhoto } from "@/components/profile-photo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LanguageToggle } from "@/components/language-toggle";
@@ -32,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth-context";
+import { profilePhotoUrl } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
 import type { UserRole } from "@direct/shared";
@@ -134,6 +136,7 @@ export function AppShell({
 
   const driverLinks = [
     { href: "/app/driver", label: dict.nav.ordersTab, icon: Package },
+    { href: "/app/driver/history", label: dict.nav.history, icon: History },
     { href: "/app/driver/dashboard", label: dict.nav.money, icon: Wallet },
     { href: "/app/profile", label: dict.nav.profile, icon: User },
   ];
@@ -221,7 +224,17 @@ export function AppShell({
               </Badge>
             ) : null}
             <NotificationBell />
-            <span className="hidden text-base font-medium sm:inline">{user.full_name}</span>
+            <Link
+              href="/app/profile"
+              className="flex items-center gap-2 rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <ProfilePhoto
+                src={profilePhotoUrl(state, user.id)}
+                name={user.full_name}
+                className="size-11"
+              />
+              <span className="hidden text-base font-medium sm:inline">{user.full_name}</span>
+            </Link>
             <LanguageToggle />
             <ThemeToggle />
             <Button

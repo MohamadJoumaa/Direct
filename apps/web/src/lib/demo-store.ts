@@ -18,6 +18,7 @@ import {
   type OrderType,
   type UserRole,
 } from "@direct/shared";
+import { locationLabel } from "@/lib/place-name";
 
 export type Profile = {
   id: string;
@@ -54,10 +55,61 @@ export type Driver = {
   rating_count: number;
   subscription_status: "active" | "grace" | "frozen" | "pending_payment";
   subscription_ends_at: string | null;
+  /** Admin freeze — independent of subscription expiry. */
+  admin_frozen: boolean;
+  banned: boolean;
 };
+
+export type DriverReviewStatus = "paid" | "grace" | "frozen" | "banned" | "unpaid";
+export type DriverPayMethod = "whish" | "whish_manual" | "none";
+
+export function driverReviewStatus(driver: Driver): DriverReviewStatus {
+  if (driver.banned) return "banned";
+  if (driver.admin_frozen || driver.subscription_status === "frozen") return "frozen";
+  if (driver.subscription_status === "grace") return "grace";
+  if (driver.subscription_status === "pending_payment") return "unpaid";
+  return "paid";
+}
+
+export function driverCannotWork(driver: Driver): boolean {
+  return (
+    driver.banned ||
+    driver.admin_frozen ||
+    driver.subscription_status === "frozen" ||
+    driver.subscription_status === "pending_payment"
+  );
+}
+
+/** Latest Whish attempt for this driver (list is newest-first). */
+export function driverPayMethod(state: DemoState, driverId: string): DriverPayMethod {
+  const latest = state.whish.find((t) => t.driver_id === driverId);
+  if (!latest) return "none";
+  return latest.source === "api" ? "whish" : "whish_manual";
+}
+
+/** First public order number in the shared sequence (client + business + admin). */
+export const FIRST_PUBLIC_ORDER_NUMBER = 1200;
+
+export function formatOrderNumber(n: number): string {
+  return `#${n}`;
+}
+
+export function nextAvailableOrderNumber(state: {
+  orders: { order_number?: number }[];
+  next_order_number?: number;
+}): number {
+  const maxAssigned = state.orders.reduce((m, o) => Math.max(m, o.order_number ?? 0), 0);
+  return Math.max(
+    state.next_order_number ?? FIRST_PUBLIC_ORDER_NUMBER,
+    maxAssigned + 1,
+    FIRST_PUBLIC_ORDER_NUMBER,
+  );
+}
 
 export type Order = {
   id: string;
+  /** Short public id shared across client, business, driver, and admin. */
+  order_number: number;
   client_id: string;
   order_type: OrderType;
   status: OrderStatus;
@@ -177,6 +229,8 @@ export type DemoState = {
   products: WarehouseProduct[];
   notifications: Notification[];
   settings: CompanySettings;
+  /** Next unused public order number (never reused). */
+  next_order_number: number;
   sessionUserId: string | null;
   viewingAs: UserRole | null;
 };
@@ -294,6 +348,8 @@ function seed(): DemoState {
         rating_count: 0,
         subscription_status: "active",
         subscription_ends_at: daysFromNow(365),
+        admin_frozen: false,
+        banned: false,
       },
       {
         id: fastId,
@@ -305,6 +361,8 @@ function seed(): DemoState {
         rating_count: 12,
         subscription_status: "active",
         subscription_ends_at: daysFromNow(20),
+        admin_frozen: false,
+        banned: false,
       },
       {
         id: longId,
@@ -316,6 +374,8 @@ function seed(): DemoState {
         rating_count: 8,
         subscription_status: "active",
         subscription_ends_at: daysFromNow(12),
+        admin_frozen: false,
+        banned: false,
       },
       {
         id: trustedId,
@@ -327,6 +387,8 @@ function seed(): DemoState {
         rating_count: 20,
         subscription_status: "active",
         subscription_ends_at: daysFromNow(25),
+        admin_frozen: false,
+        banned: false,
       },
       {
         id: privateId,
@@ -338,6 +400,8 @@ function seed(): DemoState {
         rating_count: 5,
         subscription_status: "grace",
         subscription_ends_at: daysFromNow(-2),
+        admin_frozen: false,
+        banned: false,
       },
       {
         id: ownerId,
@@ -349,6 +413,8 @@ function seed(): DemoState {
         rating_count: 3,
         subscription_status: "active",
         subscription_ends_at: daysFromNow(30),
+        admin_frozen: false,
+        banned: false,
       },
     ],
     locations: [
@@ -359,7 +425,38 @@ function seed(): DemoState {
       { driver_id: privateId, lat: 33.87, lng: 35.52, updated_at: new Date().toISOString() },
       { driver_id: ownerId, lat: 33.895, lng: 35.505, updated_at: new Date().toISOString() },
     ],
-    orders: [],
+    orders: [
+      {
+        id: "ord-demo-completed-fast",
+        order_number: FIRST_PUBLIC_ORDER_NUMBER,
+        client_id: clientId,
+        order_type: "normal",
+        status: "completed",
+        product_description: "Documents envelope",
+        pickup_address: "Hamra, Beirut",
+        pickup_lat: 33.8959,
+        pickup_lng: 35.478,
+        dropoff_address: "Achrafieh, Beirut",
+        dropoff_lat: 33.8869,
+        dropoff_lng: 35.5194,
+        warehouse_id: null,
+        assigned_driver_id: fastId,
+        long_distance_driver_id: null,
+        delivery_fee_usd: 4,
+        delivery_fee_lbp: 360000,
+        night_surcharge_usd: 0,
+        company_cut_usd: 1,
+        driver_cut_usd: 3,
+        eta_minutes: 18,
+        is_night: false,
+        dispute_50_50: false,
+        client_confirmed: true,
+        driver_confirmed: true,
+        rating_stars: 5,
+        created_at: daysFromNow(-2),
+        completed_at: daysFromNow(-2),
+      },
+    ],
     reports: [],
     whish: [
       {
@@ -390,6 +487,7 @@ function seed(): DemoState {
       },
     ],
     settings: { ...DEFAULT_SETTINGS },
+    next_order_number: FIRST_PUBLIC_ORDER_NUMBER + 1,
     sessionUserId: null,
     viewingAs: null,
   };
@@ -445,6 +543,8 @@ function ensureAdminDriver(state: DemoState): DemoState {
             rating_count: 0,
             subscription_status: "active",
             subscription_ends_at: daysFromNow(365),
+            admin_frozen: false,
+            banned: false,
           },
         ],
     locations: hasLoc
@@ -479,17 +579,56 @@ function migrateState(parsed: DemoState): DemoState {
       return { ...withShop, ...withBusinessOrderCosts(withShop) };
     }),
     settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
+    drivers: (parsed.drivers ?? []).map((d) => ({
+      ...d,
+      admin_frozen: d.admin_frozen ?? false,
+      banned: d.banned ?? false,
+    })),
     orders: (parsed.orders ?? []).map((o) => ({
       ...o,
       delivery_fee_lbp: o.delivery_fee_lbp ?? 0,
+      order_number: typeof o.order_number === "number" ? o.order_number : 0,
     })),
+    next_order_number: parsed.next_order_number ?? FIRST_PUBLIC_ORDER_NUMBER,
     whish: (parsed.whish ?? []).map((t) => ({
       ...t,
       kind: t.kind === "commission" ? "commission" : "subscription",
       external_id: t.external_id ?? (t.source === "api" ? t.note : null),
     })),
   };
-  return ensureAdminDriver(next);
+  return ensureOrderNumbers(ensureAdminDriver(next));
+}
+
+function ensureOrderNumbers(state: DemoState): DemoState {
+  const used = new Set<number>();
+  for (const o of state.orders) {
+    if (o.order_number >= FIRST_PUBLIC_ORDER_NUMBER) used.add(o.order_number);
+  }
+  let cursor = FIRST_PUBLIC_ORDER_NUMBER;
+  const byAge = [...state.orders].toSorted(
+    (a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
+  );
+  const assigned = new Map<string, number>();
+  for (const o of byAge) {
+    if (o.order_number >= FIRST_PUBLIC_ORDER_NUMBER) {
+      assigned.set(o.id, o.order_number);
+      continue;
+    }
+    while (used.has(cursor)) cursor += 1;
+    assigned.set(o.id, cursor);
+    used.add(cursor);
+    cursor += 1;
+  }
+  const maxAssigned = state.orders.reduce((m, o) => Math.max(m, assigned.get(o.id) ?? 0), 0);
+  return {
+    ...state,
+    next_order_number: Math.max(
+      state.next_order_number ?? FIRST_PUBLIC_ORDER_NUMBER,
+      maxAssigned + 1,
+      FIRST_PUBLIC_ORDER_NUMBER,
+    ),
+    orders: state.orders.map((o) => ({ ...o, order_number: assigned.get(o.id)! })),
+  };
 }
 
 export function resetDemo() {
@@ -545,7 +684,10 @@ export function registerUser(
     password: input.password,
     role: input.role,
     business_name: input.business_name,
-    business_address: input.role === "business" ? input.business_address : undefined,
+    business_address:
+      input.role === "business"
+        ? locationLabel(input.business_address, input.business_lat, input.business_lng)
+        : undefined,
     business_lat: input.role === "business" ? input.business_lat : undefined,
     business_lng: input.role === "business" ? input.business_lng : undefined,
     ...(input.role === "business" ? DEFAULT_BUSINESS_ORDER_COSTS : {}),
@@ -568,6 +710,8 @@ export function registerUser(
         rating_count: 0,
         subscription_status: "pending_payment",
         subscription_ends_at: null,
+        admin_frozen: false,
+        banned: false,
       },
     ];
     next.locations = [
@@ -659,16 +803,18 @@ export function createOrder(
   const warehouse =
     input.order_type === "long_distance" ? state.warehouses[0] ?? null : null;
 
+  const order_number = nextAvailableOrderNumber(state);
   const order: Order = {
     id: uid(),
+    order_number,
     client_id: clientId,
     order_type: input.order_type,
     status: "pending",
     product_description: input.product_description,
-    pickup_address: pickupAddress,
+    pickup_address: locationLabel(pickupAddress, pickupLat, pickupLng),
     pickup_lat: pickupLat,
     pickup_lng: pickupLng,
-    dropoff_address: input.dropoff_address,
+    dropoff_address: locationLabel(input.dropoff_address, input.dropoff_lat, input.dropoff_lng),
     dropoff_lat: input.dropoff_lat,
     dropoff_lng: input.dropoff_lng,
     warehouse_id: warehouse?.id ?? null,
@@ -690,7 +836,14 @@ export function createOrder(
   };
 
   // Owner orders: notify admins — leave pending for admin/owner claim
-  return { state: { ...state, orders: [order, ...state.orders] }, order };
+  return {
+    state: {
+      ...state,
+      orders: [order, ...state.orders],
+      next_order_number: order_number + 1,
+    },
+    order,
+  };
 }
 
 export function claimOrder(
@@ -714,6 +867,8 @@ export function claimOrder(
       rating_count: 0,
       subscription_status: "active",
       subscription_ends_at: daysFromNow(365),
+      admin_frozen: false,
+      banned: false,
     };
   }
 
@@ -728,6 +883,12 @@ export function claimOrder(
         error: `Pay yesterday's company cut ($${due.toFixed(2)}) via Whish first`,
       };
     }
+  }
+  if (!isAdminActor && driver.banned) {
+    return { state, error: "This account is banned" };
+  }
+  if (!isAdminActor && driver.admin_frozen) {
+    return { state, error: "Your account is frozen by an admin" };
   }
   if (!isAdminActor && !percentageMode && driver.subscription_status === "frozen") {
     return { state, error: "Your account is frozen. Pay subscription + $10 to reactivate." };
@@ -1032,6 +1193,13 @@ export function setOnline(
   let next = ensureAdminDriver(state);
   const hasRow = next.drivers.some((d) => d.id === driverId);
   if (!hasRow) return { state, error: "Driver not found" };
+  const row = next.drivers.find((d) => d.id === driverId);
+  if (online && row?.banned) {
+    return { state, error: "This account is banned" };
+  }
+  if (online && row?.admin_frozen) {
+    return { state, error: "Your account is frozen by an admin" };
+  }
   next = {
     ...next,
     drivers: next.drivers.map((d) =>
@@ -1149,7 +1317,13 @@ export function addDocument(
     },
     ...state.documents.filter((d) => !(d.driver_id === driverId && d.doc_type === doc_type)),
   ];
-  return { ...state, documents };
+  let profiles = state.profiles;
+  if (doc_type === "selfie" && file_data) {
+    profiles = profiles.map((p) =>
+      p.id === driverId ? { ...p, avatar_url: file_data } : p,
+    );
+  }
+  return { ...state, documents, profiles };
 }
 
 export function approveDocument(
@@ -1167,6 +1341,11 @@ export function approveDocument(
   let profiles = state.profiles;
   let notifications = state.notifications;
   if (doc && approve) {
+    if (doc.doc_type === "selfie" && doc.file_data) {
+      profiles = profiles.map((p) =>
+        p.id === doc.driver_id ? { ...p, avatar_url: doc.file_data } : p,
+      );
+    }
     const required = ["selfie", "id", "vehicle_registration", "driver_license"] as const;
     const ok = required.every((t) =>
       documents.some(
@@ -1177,15 +1356,6 @@ export function approveDocument(
       drivers = drivers.map((d) =>
         d.id === doc.driver_id ? { ...d, is_trusted: true, driver_type: "trusted" } : d,
       );
-      // Set profile avatar from the approved selfie
-      const selfieDoc = documents.find(
-        (d) => d.driver_id === doc.driver_id && d.doc_type === "selfie" && d.status === "approved",
-      );
-      if (selfieDoc?.file_data) {
-        profiles = profiles.map((p) =>
-          p.id === doc.driver_id ? { ...p, avatar_url: selfieDoc.file_data } : p,
-        );
-      }
       // Send verification notification
       notifications = [
         {
@@ -1328,6 +1498,7 @@ export function availableOrdersForDriver(state: DemoState, driverId: string): Or
   }
 
   if (!driver || !driver.is_online) return [];
+  if (driver.banned || driver.admin_frozen) return [];
   if (state.settings.revenue_mode === "percentage") {
     if (driverCommissionTotals(state, driverId).dueNow > 0) return [];
   } else if (
@@ -1400,7 +1571,15 @@ export function updateProfile(
           ...(input.phone != null ? { phone: input.phone } : {}),
           ...(input.email != null ? { email: input.email.toLowerCase() } : {}),
           ...(input.business_name != null ? { business_name: input.business_name } : {}),
-          ...(input.business_address != null ? { business_address: input.business_address } : {}),
+          ...(input.business_address != null
+            ? {
+                business_address: locationLabel(
+                  input.business_address,
+                  input.business_lat ?? p.business_lat,
+                  input.business_lng ?? p.business_lng,
+                ),
+              }
+            : {}),
           ...(input.business_lat != null ? { business_lat: input.business_lat } : {}),
           ...(input.business_lng != null ? { business_lng: input.business_lng } : {}),
           ...(input.avatar_url != null ? { avatar_url: input.avatar_url } : {}),
@@ -1572,6 +1751,8 @@ export function addDriver(
           rating_count: 0,
           subscription_status: "active",
           subscription_ends_at: daysFromNow(30),
+          admin_frozen: false,
+          banned: false,
         },
       ],
       locations: [
@@ -1603,11 +1784,76 @@ export function removeDriver(
   };
 }
 
+export type DriverAccountAction = "freeze" | "unfreeze" | "ban" | "unban";
+
+export function setDriverAccountAction(
+  state: DemoState,
+  driverId: string,
+  action: DriverAccountAction,
+): { state: DemoState; error?: string } {
+  const profile = state.profiles.find((p) => p.id === driverId);
+  if (profile?.role === "admin") {
+    return { state, error: "Cannot freeze or ban the admin account" };
+  }
+  const driver = state.drivers.find((d) => d.id === driverId);
+  if (!driver) return { state, error: "Driver not found" };
+
+  const nextFlags = {
+    admin_frozen: driver.admin_frozen,
+    banned: driver.banned,
+    is_online: driver.is_online,
+  };
+  let title = "";
+  let body = "";
+
+  if (action === "freeze") {
+    nextFlags.admin_frozen = true;
+    nextFlags.is_online = false;
+    title = "Account frozen";
+    body = "An admin froze your account. You cannot take orders until they unfreeze it.";
+  } else if (action === "unfreeze") {
+    nextFlags.admin_frozen = false;
+    title = "Account unfrozen";
+    body = "An admin unfroze your account. You can go online again if your subscription is in order.";
+  } else if (action === "ban") {
+    nextFlags.banned = true;
+    nextFlags.is_online = false;
+    title = "Account banned";
+    body = "Your driver account has been banned. Contact Direct if you think this is a mistake.";
+  } else {
+    nextFlags.banned = false;
+    title = "Account reinstated";
+    body = "Your ban has been lifted. You can go online again if your subscription is in order.";
+  }
+
+  return {
+    state: {
+      ...state,
+      drivers: state.drivers.map((d) => (d.id === driverId ? { ...d, ...nextFlags } : d)),
+      notifications: [
+        {
+          id: uid(),
+          user_id: driverId,
+          title,
+          body,
+          read: false,
+          created_at: new Date().toISOString(),
+        },
+        ...state.notifications,
+      ],
+    },
+  };
+}
+
 export function addWarehouse(
   state: DemoState,
   input: { name: string; address: string; lat: number; lng: number },
 ): DemoState {
-  const warehouse: Warehouse = { id: uid(), ...input };
+  const warehouse: Warehouse = {
+    id: uid(),
+    ...input,
+    address: locationLabel(input.address, input.lat, input.lng),
+  };
   return { ...state, warehouses: [...state.warehouses, warehouse] };
 }
 
@@ -1648,6 +1894,19 @@ export function addWarehouseProduct(
 
 export function removeWarehouseProduct(state: DemoState, productId: string): DemoState {
   return { ...state, products: state.products.filter((p) => p.id !== productId) };
+}
+
+/** Selfie (if uploaded) is the driver's profile photo; otherwise `avatar_url`. */
+export function profilePhotoUrl(state: DemoState, userId: string): string | undefined {
+  const selfie = state.documents.find(
+    (d) =>
+      d.driver_id === userId &&
+      d.doc_type === "selfie" &&
+      d.file_data &&
+      d.status !== "rejected",
+  );
+  if (selfie?.file_data) return selfie.file_data;
+  return state.profiles.find((p) => p.id === userId)?.avatar_url;
 }
 
 /**

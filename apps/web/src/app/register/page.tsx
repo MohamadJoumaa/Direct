@@ -213,6 +213,7 @@ function RegisterForm() {
                             lat: shopPin.lat,
                             lng: shopPin.lng,
                             label: dict.auth.shopLocation,
+                            place: shopAddress,
                             kind: "pickup" as const,
                           },
                         ]

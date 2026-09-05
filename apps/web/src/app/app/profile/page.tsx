@@ -6,14 +6,17 @@ import { toast } from "sonner";
 import { Camera, Star, ShieldCheck } from "lucide-react";
 import { formatDeliveryCash, withBusinessOrderCosts } from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
+import { ProfilePhoto } from "@/components/profile-photo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
+import { profilePhotoUrl } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
+import { locationLabel } from "@/lib/place-name";
 
 const DOC_TYPES = ["selfie", "id", "vehicle_registration", "driver_license"] as const;
 
@@ -23,7 +26,7 @@ function fileToAvatar(file: File): Promise<string> {
     const url = URL.createObjectURL(file);
     const img = new window.Image();
     img.onload = () => {
-      const size = 128;
+      const size = 256;
       const canvas = document.createElement("canvas");
       canvas.width = size;
       canvas.height = size;
@@ -71,12 +74,7 @@ export default function ProfilePage() {
     driver_license: dict.profile.docLicense,
   };
 
-  const initials = user.full_name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const photoUrl = profilePhotoUrl(state, user.id);
 
   function onSave(e: React.FormEvent) {
     e.preventDefault();
@@ -98,9 +96,14 @@ export default function ProfilePage() {
     if (!file) return;
     try {
       const dataUrl = await fileToAvatar(file);
-      const err = updateProfile(user!.id, { avatar_url: dataUrl });
-      if (err) toast.error(err);
-      else toast.success(dict.profile.saved);
+      if (driver) {
+        addDocument(user!.id, "selfie", file.name, dataUrl);
+        toast.success(dict.profile.uploadedToast);
+      } else {
+        const err = updateProfile(user!.id, { avatar_url: dataUrl });
+        if (err) toast.error(err);
+        else toast.success(dict.profile.saved);
+      }
     } catch {
       toast.error("Could not read that image");
     }
@@ -118,20 +121,11 @@ export default function ProfilePage() {
               onClick={() => avatarInputRef.current?.click()}
               aria-label={dict.profile.editProfile}
             >
-              {user.avatar_url ? (
-                <Image
-                  src={user.avatar_url}
-                  alt=""
-                  fill
-                  sizes="96px"
-                  className="object-cover"
-                  unoptimized
-                />
-              ) : (
-                <span className="flex h-full w-full items-center justify-center text-3xl font-bold text-muted-foreground">
-                  {initials}
-                </span>
-              )}
+              <ProfilePhoto
+                src={photoUrl}
+                name={user.full_name}
+                className="size-24 text-3xl"
+              />
               <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                 <Camera className="size-6 text-white" />
               </span>
@@ -202,7 +196,9 @@ export default function ProfilePage() {
                 <div className="flex flex-col gap-2">
                   <Label className="text-base">{dict.profile.shopLocation}</Label>
                   <p className="text-base text-muted-foreground">
-                    {user.business_address?.trim() || "—"}
+                    {user.business_address?.trim()
+                      ? locationLabel(user.business_address, user.business_lat, user.business_lng)
+                      : "—"}
                   </p>
                   <p className="text-sm text-muted-foreground">{dict.profile.shopLocationReadonly}</p>
                 </div>

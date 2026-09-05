@@ -17,6 +17,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/lib/i18n";
+import {
+  locationLabel,
+  nameFromGeocoderResult,
+  nameFromPlace,
+  nearestAreaName,
+} from "@/lib/place-name";
 
 export const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
@@ -73,6 +79,8 @@ type MapMarker = {
   lat: number;
   lng: number;
   label: string;
+  /** Human place name (neighborhood / city). Shown instead of coordinates. */
+  place?: string;
   role?: DriverType | string;
   kind: "driver" | "pickup" | "dropoff" | "warehouse" | "live";
 };
@@ -153,17 +161,19 @@ function PlaceSearchInner({ placeholder, onSelect, className }: PlaceSearchProps
   useEffect(() => {
     if (!places || !inputRef.current) return;
     const autocomplete = new places.Autocomplete(inputRef.current, {
-      fields: ["geometry.location", "formatted_address", "name"],
+      fields: ["geometry.location", "formatted_address", "name", "address_components"],
       componentRestrictions: { country: "lb" },
     });
     const listener = autocomplete.addListener("place_changed", () => {
       const place = autocomplete.getPlace();
       const loc = place.geometry?.location;
       if (!loc) return;
+      const lat = loc.lat();
+      const lng = loc.lng();
       onSelectRef.current({
-        address: place.formatted_address ?? place.name ?? "",
-        lat: loc.lat(),
-        lng: loc.lng(),
+        address: locationLabel(nameFromPlace(place), lat, lng),
+        lat,
+        lng,
       });
     });
     return () => listener.remove();
@@ -172,14 +182,18 @@ function PlaceSearchInner({ placeholder, onSelect, className }: PlaceSearchProps
   return <Input ref={inputRef} placeholder={placeholder} className={className} aria-label={placeholder} />;
 }
 
-/** Best-effort address for a tapped point. Falls back to coordinates. */
+/** Best-effort place name for a tapped point. Never returns raw coordinates. */
 export async function reverseGeocode(lat: number, lng: number): Promise<string> {
-  const fallback = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  const fallback = nearestAreaName(lat, lng);
   if (typeof google === "undefined" || !google.maps?.Geocoder) return fallback;
   try {
     const geocoder = new google.maps.Geocoder();
     const res = await geocoder.geocode({ location: { lat, lng } });
-    return res.results[0]?.formatted_address ?? fallback;
+    for (const result of res.results) {
+      const name = nameFromGeocoderResult(result);
+      if (name) return name;
+    }
+    return fallback;
   } catch {
     return fallback;
   }
@@ -239,7 +253,7 @@ function MapMarkers({ markers, dark }: { markers: MapMarker[]; dark: boolean }) 
           <Marker
             key={m.id}
             position={{ lat: m.lat, lng: m.lng }}
-            title={m.label}
+            title={`${m.label} — ${locationLabel(m.place, m.lat, m.lng)}`}
             icon={{
               path: google.maps.SymbolPath.CIRCLE,
               scale,
@@ -406,8 +420,8 @@ function DeliveryMapCard({
                   </Badge>
                 ) : null}
                 <Badge variant="outline">{m.kind}</Badge>
-                <span className="font-mono text-sm text-muted-foreground">
-                  {m.lat.toFixed(4)}, {m.lng.toFixed(4)}
+                <span className="text-sm text-muted-foreground">
+                  {locationLabel(m.place, m.lat, m.lng)}
                 </span>
               </div>
             </li>

@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
+import { formatOrderNumber } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 
 export default function AdminReportsPage() {
@@ -37,7 +38,8 @@ export default function AdminReportsPage() {
                     {reporter?.full_name} · {r.status}
                   </p>
                   <p className="text-base text-muted-foreground">
-                    Order: {order?.product_description ?? r.order_id}
+                    Order {order ? formatOrderNumber(order.order_number) : ""}:{" "}
+                    {order?.product_description ?? r.order_id}
                   </p>
                   <p className="mt-2 text-lg">{r.reason}</p>
                   {r.status === "open" ? (

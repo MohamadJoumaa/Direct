@@ -1,11 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Navigation } from "lucide-react";
+import { ArrowLeft, Navigation, Phone } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { DeliveryMap } from "@/components/delivery-map";
+import { OrderReceipt } from "@/components/order-receipt";
+import { ProfilePhoto } from "@/components/profile-photo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth-context";
+import { formatOrderNumber, profilePhotoUrl } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
 import { nextNavStop, openDrivingDirections } from "@/lib/maps-nav";
@@ -33,13 +37,20 @@ export default function DriverOrderPage() {
   const [checkNote, setCheckNote] = useState("");
 
   const order = state.orders.find((o) => o.id === params.id);
-  if (!user || !order) {
+  const assigned =
+    !!user &&
+    !!order &&
+    (order.assigned_driver_id === user.id || order.long_distance_driver_id === user.id);
+  if (!user || !order || !assigned) {
     return (
       <AppShell>
-        <p className="text-easy">Order not found.</p>
+        <p className="text-easy">{dict.common.orderNotFound}</p>
       </AppShell>
     );
   }
+
+  const client = state.profiles.find((p) => p.id === order.client_id);
+  const isHistory = ["completed", "cancelled", "disputed"].includes(order.status);
 
   const warehouse = order.warehouse_id
     ? state.warehouses.find((w) => w.id === order.warehouse_id)
@@ -54,31 +65,55 @@ export default function DriverOrderPage() {
         : dict.driver.navigateDropoff;
 
   return (
-    <AppShell title="Job">
+    <AppShell title={`${dict.common.orderNumber} ${formatOrderNumber(order.order_number)}`}>
       <div className="flex flex-col gap-6">
-        <Card className="border-2">
-          <CardHeader>
-            <CardTitle className="text-2xl">{order.product_description}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2 text-lg">
-            <p>
-              <strong>Status:</strong> {order.status.replaceAll("_", " ")}
-            </p>
-            <p>
-              <strong>Pickup:</strong> {order.pickup_address}
-            </p>
-            <p>
-              <strong>Drop-off:</strong> {order.dropoff_address}
-            </p>
-            {warehouse ? (
-              <p>
-                <strong>Warehouse:</strong> {warehouse.name} — {warehouse.address}
-              </p>
-            ) : null}
-            <p>
-              <strong>Your pay:</strong> ${order.driver_cut_usd.toFixed(2)}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
+        <Link
+          href={isHistory ? "/app/driver/history" : "/app/driver"}
+          className="touch-target inline-flex w-fit items-center gap-2 text-base font-medium text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4 rtl:rotate-180" />
+          {isHistory ? dict.driver.pastJobs : dict.driver.backToJobs}
+        </Link>
+
+        <OrderReceipt
+          order={order}
+          warehouse={warehouse}
+          cashLabel={dict.driver.yourPay}
+          cashValue={`$${order.driver_cut_usd.toFixed(2)}`}
+          people={
+            client ? (
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border-2 bg-muted/40 p-3">
+                <ProfilePhoto
+                  src={profilePhotoUrl(state, client.id)}
+                  name={client.full_name}
+                  className="size-12"
+                />
+                <div className="min-w-0 flex-1">
+                  <p>
+                    <strong>{dict.common.client}:</strong> {client.full_name}
+                  </p>
+                  <p>
+                    <strong>{dict.common.phone}:</strong> {client.phone}
+                  </p>
+                </div>
+                <Button
+                  nativeButton={false}
+                  render={<a href={`tel:${client.phone}`} />}
+                  size="lg"
+                  className="touch-target h-12 rounded-full px-6 text-base font-semibold"
+                  aria-label={`${dict.driver.callClient} ${client.phone}`}
+                >
+                  <Phone data-icon="inline-start" />
+                  {dict.driver.callClient}
+                </Button>
+              </div>
+            ) : null
+          }
+        />
+
+        {isHistory ? null : (
+          <Card className="border-2">
+            <CardContent className="flex flex-wrap gap-2 pt-6">
               <Button
                 size="lg"
                 className="touch-target h-12 rounded-full px-6 text-base font-semibold"
@@ -123,10 +158,11 @@ export default function DriverOrderPage() {
               >
                 {dict.driver.navigateDropoff}
               </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
+        {isHistory ? null : (
         <Card className="border-2">
           <CardHeader>
             <CardTitle className="text-xl">Update progress</CardTitle>
@@ -216,8 +252,9 @@ export default function DriverOrderPage() {
             ) : null}
           </CardContent>
         </Card>
+        )}
 
-        {order.order_type === "private" ? (
+        {!isHistory && order.order_type === "private" ? (
           <Card className="border-2">
             <CardHeader>
               <CardTitle className="text-xl">Daily check-in</CardTitle>
@@ -272,6 +309,7 @@ export default function DriverOrderPage() {
           </Card>
         ) : null}
 
+        {isHistory ? null : (
         <Card className="border-2">
           <CardHeader>
             <CardTitle className="text-xl">Report fake / problem client</CardTitle>
@@ -301,6 +339,7 @@ export default function DriverOrderPage() {
             </Button>
           </CardContent>
         </Card>
+        )}
 
         <DeliveryMap
           markers={[
@@ -309,6 +348,7 @@ export default function DriverOrderPage() {
               lat: order.pickup_lat,
               lng: order.pickup_lng,
               label: "Pickup",
+              place: order.pickup_address,
               kind: "pickup",
             },
             ...(warehouse
@@ -318,6 +358,7 @@ export default function DriverOrderPage() {
                     lat: warehouse.lat,
                     lng: warehouse.lng,
                     label: warehouse.name,
+                    place: warehouse.address,
                     kind: "warehouse" as const,
                   },
                 ]
@@ -327,6 +368,7 @@ export default function DriverOrderPage() {
               lat: order.dropoff_lat,
               lng: order.dropoff_lng,
               label: dict.common.dropoff,
+              place: order.dropoff_address,
               kind: "dropoff",
             },
             ...(liveLoc

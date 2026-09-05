@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDeliveryCash } from "@direct/shared";
-import { publicDriverLabel } from "@/lib/demo-store";
+import { publicDriverLabel, formatOrderNumber } from "@/lib/demo-store";
 import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { DeliveryMap } from "@/components/delivery-map";
@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
 import { orderTypeLabel, useI18n } from "@/lib/i18n";
+import { locationLabel } from "@/lib/place-name";
 import { activeDriverId, shortProduct, trackingRoute } from "@/lib/maps-nav";
 
 export default function ClientHomePage() {
@@ -37,6 +38,7 @@ export default function ClientHomePage() {
       lat: number;
       lng: number;
       label: string;
+      place?: string;
       kind: "pickup" | "dropoff" | "live" | "driver" | "warehouse";
     }[] = [
       {
@@ -44,6 +46,7 @@ export default function ClientHomePage() {
         lat: o.pickup_lat,
         lng: o.pickup_lng,
         label: `${name} · ${dict.common.pickup}`,
+        place: o.pickup_address,
         kind: "pickup",
       },
       {
@@ -51,6 +54,7 @@ export default function ClientHomePage() {
         lat: o.dropoff_lat,
         lng: o.dropoff_lng,
         label: `${name} · ${dict.common.dropoff}`,
+        place: o.dropoff_address,
         kind: "dropoff",
       },
     ];
@@ -127,9 +131,13 @@ export default function ClientHomePage() {
               <Card key={o.id} className="border-2">
                 <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
                   <div>
+                    <p className="font-mono text-sm font-semibold tabular-nums text-muted-foreground">
+                      {formatOrderNumber(o.order_number)}
+                    </p>
                     <CardTitle className="text-2xl">{o.product_description}</CardTitle>
                     <p className="text-lg text-muted-foreground">
-                      {o.pickup_address} → {o.dropoff_address}
+                      {locationLabel(o.pickup_address, o.pickup_lat, o.pickup_lng)} →{" "}
+                      {locationLabel(o.dropoff_address, o.dropoff_lat, o.dropoff_lng)}
                     </p>
                     <p className="mt-1 text-base text-muted-foreground">
                       {dict.common.driver}: {publicDriverLabel(state, o, copy)}
