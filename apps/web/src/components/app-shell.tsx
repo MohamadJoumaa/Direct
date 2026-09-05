@@ -55,15 +55,22 @@ function NotificationBell() {
   if (notifs.length === 0) return null;
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative touch-target">
-          <Bell className="size-5" />
-          {unread > 0 ? (
-            <span className="absolute -end-0.5 -top-0.5 flex size-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
-              {unread}
-            </span>
-          ) : null}
-        </Button>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative touch-target"
+            aria-label="Notifications"
+          />
+        }
+      >
+        <Bell />
+        {unread > 0 ? (
+          <span className="absolute -end-0.5 -top-0.5 flex size-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+            {unread}
+          </span>
+        ) : null}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0">
         <div className="border-b px-4 py-3">
