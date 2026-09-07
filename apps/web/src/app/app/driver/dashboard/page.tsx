@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Menu } from "lucide-react";
 import { WHISH_NUMBER } from "@direct/shared";
-import { driverCommissionTotals, driverDailyProfit, driverRevenue, formatOrderNumber } from "@/lib/demo-store";
+import { driverCommissionTotals, driverCompanyPayMode, driverDailyProfit, driverRevenue, formatOrderNumber } from "@/lib/demo-store";
 import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { Button } from "@/components/ui/button";
@@ -67,7 +67,7 @@ export default function DriverDashboardPage() {
       ["completed", "disputed"].includes(o.status),
   );
 
-  const percentageMode = state.settings.revenue_mode === "percentage";
+  const percentageMode = driverCompanyPayMode(driver, state.settings) === "percentage";
   const commission = percentageMode
     ? driverCommissionTotals(state, user.id)
     : { dueNow: 0, accruingToday: 0 };

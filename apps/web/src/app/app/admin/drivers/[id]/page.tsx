@@ -2,18 +2,17 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { toast } from "sonner";
 import { ArrowLeft, Phone, ShieldCheck, Star } from "lucide-react";
 import { DRIVER_TYPE_LABELS, formatDeliveryCash } from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
 import { DocumentAttachment } from "@/components/document-attachment";
 import { ProfilePhoto } from "@/components/profile-photo";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import {
   driverPayMethod,
+  driverCompanyPayMode,
   driverReviewStatus,
   formatOrderNumber,
   profilePhotoUrl,
@@ -21,13 +20,14 @@ import {
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
 import { payMethodLabel, ReviewStatusBadge } from "../account-status";
+import { DriverAccountActions } from "../driver-account-actions";
 
 const DOC_TYPES = ["selfie", "id", "vehicle_registration", "driver_license"] as const;
 
 export default function AdminDriverProfilePage() {
   const params = useParams<{ id: string }>();
   const { isAdmin, user } = useAuth();
-  const { state, setDriverAccountAction } = useStore();
+  const { state, setDriverAccountAction, setDriverPaymentWaived } = useStore();
   const { dict } = useI18n();
 
   const driver = state.drivers.find((d) => d.id === params.id);
@@ -49,7 +49,7 @@ export default function AdminDriverProfilePage() {
     );
   }
 
-  const status = driverReviewStatus(driver);
+  const status = driverReviewStatus(driver, state);
   const payMethod = driverPayMethod(state, driver.id);
   const isSelf = driver.id === user.id;
   const docs = state.documents.filter((d) => d.driver_id === driver.id);
@@ -65,19 +65,6 @@ export default function AdminDriverProfilePage() {
     vehicle_registration: dict.profile.docVehicle,
     driver_license: dict.profile.docLicense,
   };
-
-  function runAction(action: "freeze" | "unfreeze" | "ban" | "unban", confirmMsg?: string) {
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
-    const err = setDriverAccountAction(driver.id, action);
-    if (err) {
-      toast.error(err);
-      return;
-    }
-    if (action === "freeze") toast.success(dict.admin.driverFrozenToast);
-    if (action === "unfreeze") toast.success(dict.admin.driverUnfrozenToast);
-    if (action === "ban") toast.success(dict.admin.driverBannedToast);
-    if (action === "unban") toast.success(dict.admin.driverUnbannedToast);
-  }
 
   return (
     <AppShell title={dict.admin.driverProfile}>
@@ -140,6 +127,12 @@ export default function AdminDriverProfilePage() {
               {new Date(profile.created_at).toLocaleDateString()}
             </p>
             <p>
+              <strong>{dict.admin.companyPlan}:</strong>{" "}
+              {driverCompanyPayMode(driver, state.settings) === "percentage"
+                ? dict.admin.planPercentage
+                : dict.admin.planSubscription}
+            </p>
+            <p>
               <strong>{dict.admin.paymentMethod}:</strong> {payMethodLabel(payMethod, dict)}
             </p>
             <p className="flex flex-wrap items-center gap-2">
@@ -153,47 +146,16 @@ export default function AdminDriverProfilePage() {
               </p>
             ) : null}
             <p className="text-base text-muted-foreground">{dict.admin.restrictionHint}</p>
+            <p className="text-base text-muted-foreground">{dict.admin.unpaidAccessHint}</p>
             {!isSelf ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {driver.admin_frozen ? (
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="touch-target rounded-full"
-                    onClick={() => runAction("unfreeze")}
-                  >
-                    {dict.admin.unfreezeDriver}
-                  </Button>
-                ) : (
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="touch-target rounded-full"
-                    onClick={() => runAction("freeze", dict.admin.confirmFreeze)}
-                    disabled={driver.banned}
-                  >
-                    {dict.admin.freezeDriver}
-                  </Button>
-                )}
-                {driver.banned ? (
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="touch-target rounded-full"
-                    onClick={() => runAction("unban")}
-                  >
-                    {dict.admin.unbanDriver}
-                  </Button>
-                ) : (
-                  <Button
-                    size="lg"
-                    variant="destructive"
-                    className="touch-target rounded-full"
-                    onClick={() => runAction("ban", dict.admin.confirmBan)}
-                  >
-                    {dict.admin.banDriver}
-                  </Button>
-                )}
+              <div className="mt-2">
+                <DriverAccountActions
+                  driver={driver}
+                  dict={dict}
+                  size="lg"
+                  setDriverAccountAction={setDriverAccountAction}
+                  setDriverPaymentWaived={setDriverPaymentWaived}
+                />
               </div>
             ) : null}
           </CardContent>

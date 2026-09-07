@@ -17,25 +17,35 @@ import { useAuth } from "@/lib/auth-context";
 import { formatOrderNumber } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { orderTypeLabel, useI18n } from "@/lib/i18n";
+import { OrderSearchField, useOrderSearch } from "@/components/order-search";
+import { orderPartyExtras } from "@/lib/order-search";
 
 export default function ClientHistoryPage() {
   const { user } = useAuth();
   const { state } = useStore();
   const { dict } = useI18n();
-  if (!user) return null;
-  const history = state.orders.filter(
-    (o) => o.client_id === user.id && ["completed", "cancelled", "disputed"].includes(o.status),
+  const history = user
+    ? state.orders.filter(
+        (o) => o.client_id === user.id && ["completed", "cancelled", "disputed"].includes(o.status),
+      )
+    : [];
+  const { query, setQuery, showSearch, filtered } = useOrderSearch(history, (o) =>
+    orderPartyExtras(o, state.profiles),
   );
+  if (!user) return null;
 
   return (
     <AppShell title={dict.nav.history}>
       <Card className="border-2">
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-3">
           <CardTitle className="heading-easy">{dict.client.pastDeliveries}</CardTitle>
+          <OrderSearchField show={showSearch} value={query} onChange={setQuery} />
         </CardHeader>
         <CardContent>
           {history.length === 0 ? (
             <p className="text-easy text-muted-foreground">{dict.client.noCompleted}</p>
+          ) : filtered.length === 0 ? (
+            <p className="text-easy text-muted-foreground">{dict.common.noOrderMatches}</p>
           ) : (
             <Table>
               <TableHeader>
@@ -48,7 +58,7 @@ export default function ClientHistoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {history.map((o) => (
+                {filtered.map((o) => (
                     <TableRow key={o.id}>
                       <TableCell className="font-mono text-base font-semibold tabular-nums">
                         <Link

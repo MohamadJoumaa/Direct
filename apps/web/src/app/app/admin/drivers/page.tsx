@@ -14,11 +14,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   driverPayMethod,
+  driverCompanyPayMode,
   driverReviewStatus,
   profilePhotoUrl,
   type DriverReviewStatus,
 } from "@/lib/demo-store";
 import { payMethodLabel, ReviewStatusBadge } from "./account-status";
+import { DriverAccountActions } from "./driver-account-actions";
 import {
   Select,
   SelectContent,
@@ -41,7 +43,7 @@ import { useI18n } from "@/lib/i18n";
 
 export default function AdminDriversPage() {
   const { isAdmin, user } = useAuth();
-  const { state, addDriver, setDriverAccountAction } = useStore();
+  const { state, addDriver, setDriverAccountAction, setDriverPaymentWaived } = useStore();
   const { dict } = useI18n();
 
   const [name, setName] = useState("");
@@ -56,7 +58,7 @@ export default function AdminDriversPage() {
     const q = query.trim().toLowerCase();
     return state.drivers.filter((d) => {
       const p = state.profiles.find((x) => x.id === d.id);
-      const status = driverReviewStatus(d);
+      const status = driverReviewStatus(d, state);
       if (filter !== "all" && status !== filter) return false;
       if (!q) return true;
       return (
@@ -65,7 +67,7 @@ export default function AdminDriversPage() {
         (p?.email ?? "").toLowerCase().includes(q)
       );
     });
-  }, [state.drivers, state.profiles, query, filter]);
+  }, [state, query, filter]);
 
   if (!isAdmin || !user) {
     return (
@@ -203,6 +205,7 @@ export default function AdminDriversPage() {
                   ["paid", dict.admin.statusPaid],
                   ["grace", dict.admin.statusGrace],
                   ["unpaid", dict.admin.statusUnpaid],
+                  ["waived", dict.admin.statusWaived],
                   ["frozen", dict.admin.statusFrozen],
                   ["banned", dict.admin.statusBanned],
                 ] as const
@@ -227,6 +230,7 @@ export default function AdminDriversPage() {
                     <TableHead>{dict.common.name}</TableHead>
                     <TableHead>{dict.common.phone}</TableHead>
                     <TableHead>{dict.common.type}</TableHead>
+                    <TableHead>{dict.admin.companyPlan}</TableHead>
                     <TableHead>{dict.admin.paymentMethod}</TableHead>
                     <TableHead>{dict.admin.accountStatus}</TableHead>
                     <TableHead>{dict.profile.rating}</TableHead>
@@ -236,7 +240,7 @@ export default function AdminDriversPage() {
                 <TableBody>
                   {filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                         {dict.admin.noDriversMatch}
                       </TableCell>
                     </TableRow>
@@ -244,7 +248,7 @@ export default function AdminDriversPage() {
                     filtered.map((d) => {
                       const p = state.profiles.find((x) => x.id === d.id);
                       const isSelf = d.id === user.id;
-                      const status = driverReviewStatus(d);
+                      const status = driverReviewStatus(d, state);
                       const payMethod = driverPayMethod(state, d.id);
                       return (
                         <TableRow key={d.id}>
@@ -267,6 +271,11 @@ export default function AdminDriversPage() {
                           <TableCell>
                             <Badge>{DRIVER_TYPE_LABELS[d.driver_type]}</Badge>
                           </TableCell>
+                          <TableCell>
+                            {driverCompanyPayMode(d, state.settings) === "percentage"
+                              ? dict.admin.planPercentage
+                              : dict.admin.planSubscription}
+                          </TableCell>
                           <TableCell>{payMethodLabel(payMethod, dict)}</TableCell>
                           <TableCell>
                             <ReviewStatusBadge status={status} dict={dict} />
@@ -284,65 +293,13 @@ export default function AdminDriversPage() {
                               >
                                 {dict.admin.openProfile}
                               </LinkButton>
-                              {!isSelf && !d.banned ? (
-                                d.admin_frozen ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="touch-target"
-                                    onClick={() => {
-                                      const err = setDriverAccountAction(d.id, "unfreeze");
-                                      if (err) toast.error(err);
-                                      else toast.success(dict.admin.driverUnfrozenToast);
-                                    }}
-                                  >
-                                    {dict.admin.unfreezeDriver}
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="touch-target"
-                                    onClick={() => {
-                                      if (!window.confirm(dict.admin.confirmFreeze)) return;
-                                      const err = setDriverAccountAction(d.id, "freeze");
-                                      if (err) toast.error(err);
-                                      else toast.success(dict.admin.driverFrozenToast);
-                                    }}
-                                  >
-                                    {dict.admin.freezeDriver}
-                                  </Button>
-                                )
-                              ) : null}
                               {!isSelf ? (
-                                d.banned ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="touch-target"
-                                    onClick={() => {
-                                      const err = setDriverAccountAction(d.id, "unban");
-                                      if (err) toast.error(err);
-                                      else toast.success(dict.admin.driverUnbannedToast);
-                                    }}
-                                  >
-                                    {dict.admin.unbanDriver}
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    className="touch-target"
-                                    onClick={() => {
-                                      if (!window.confirm(dict.admin.confirmBan)) return;
-                                      const err = setDriverAccountAction(d.id, "ban");
-                                      if (err) toast.error(err);
-                                      else toast.success(dict.admin.driverBannedToast);
-                                    }}
-                                  >
-                                    {dict.admin.banDriver}
-                                  </Button>
-                                )
+                                <DriverAccountActions
+                                  driver={d}
+                                  dict={dict}
+                                  setDriverAccountAction={setDriverAccountAction}
+                                  setDriverPaymentWaived={setDriverPaymentWaived}
+                                />
                               ) : null}
                             </div>
                           </TableCell>

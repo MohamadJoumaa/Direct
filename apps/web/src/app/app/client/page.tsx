@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDeliveryCash } from "@direct/shared";
-import { publicDriverLabel, formatOrderNumber } from "@/lib/demo-store";
+import { publicDriverLabel, formatOrderNumber, publicDriverInfo } from "@/lib/demo-store";
 import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { DeliveryMap } from "@/components/delivery-map";
@@ -12,12 +12,13 @@ import { useStore } from "@/lib/store-context";
 import { orderTypeLabel, useI18n } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
 import { activeDriverId, shortProduct, trackingRoute } from "@/lib/maps-nav";
+import { OrderSearchField, useOrderSearch } from "@/components/order-search";
+import { orderPartyExtras } from "@/lib/order-search";
 
 export default function ClientHomePage() {
   const { user } = useAuth();
   const { state } = useStore();
   const { dict } = useI18n();
-  if (!user) return null;
 
   const copy = {
     waiting: dict.common.waitingForDriver,
@@ -25,11 +26,16 @@ export default function ClientHomePage() {
     yourDriver: dict.common.yourDriver,
   };
 
-  const myOrders = state.orders.filter((o) => o.client_id === user.id);
+  const myOrders = user ? state.orders.filter((o) => o.client_id === user.id) : [];
   const ongoing = myOrders.filter((o) => !["completed", "cancelled", "disputed"].includes(o.status));
-  const needsConfirm = ongoing.find(
-    (o) => o.status === "awaiting_confirmation" && !o.client_confirmed,
-  );
+  const {
+    query: ongoingQuery,
+    setQuery: setOngoingQuery,
+    showSearch: showOngoingSearch,
+    filtered: filteredOngoing,
+  } = useOrderSearch(ongoing, (o) => orderPartyExtras(o, state.profiles));
+
+  if (!user) return null;
 
   const liveMarkers = ongoing.flatMap((o) => {
     const name = shortProduct(o.product_description);
@@ -59,7 +65,9 @@ export default function ClientHomePage() {
       },
     ];
     const driverId = activeDriverId(o);
-    const loc = driverId ? state.locations.find((l) => l.driver_id === driverId) : null;
+    const linked = publicDriverInfo(state, o).kind !== "none";
+    const loc =
+      linked && driverId ? state.locations.find((l) => l.driver_id === driverId) : null;
     if (loc) {
       markers.push({
         id: `${o.id}-live`,
@@ -76,9 +84,11 @@ export default function ClientHomePage() {
   const singleWarehouse =
     single?.warehouse_id ? state.warehouses.find((w) => w.id === single.warehouse_id) : null;
   const singleLiveId = single ? activeDriverId(single) : null;
-  const singleLive = singleLiveId
-    ? (state.locations.find((l) => l.driver_id === singleLiveId) ?? null)
-    : null;
+  const singleLinked = single ? publicDriverInfo(state, single).kind !== "none" : false;
+  const singleLive =
+    singleLinked && singleLiveId
+      ? (state.locations.find((l) => l.driver_id === singleLiveId) ?? null)
+      : null;
   const liveRoute = single
     ? trackingRoute(
         single,
@@ -90,24 +100,6 @@ export default function ClientHomePage() {
   return (
     <AppShell title={dict.nav.home}>
       <div className="flex flex-col gap-6">
-        {needsConfirm ? (
-          <Card className="border-2 bg-muted">
-            <CardHeader>
-              <CardTitle className="text-2xl">{dict.client.pleaseConfirmTitle}</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              <p className="text-easy">{dict.client.pleaseConfirmBody}</p>
-              <LinkButton
-                href={`/app/client/orders/${needsConfirm.id}`}
-                size="lg"
-                className="touch-target w-fit text-lg"
-              >
-                {dict.client.confirmAndRate}
-              </LinkButton>
-            </CardContent>
-          </Card>
-        ) : null}
-
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="heading-easy">{dict.client.yourOrders}</h1>
           <LinkButton
@@ -127,7 +119,15 @@ export default function ClientHomePage() {
           </Card>
         ) : (
           <div className="grid gap-4">
-            {ongoing.map((o) => (
+            <OrderSearchField
+              show={showOngoingSearch}
+              value={ongoingQuery}
+              onChange={setOngoingQuery}
+            />
+            {filteredOngoing.length === 0 ? (
+              <p className="text-easy text-muted-foreground">{dict.common.noOrderMatches}</p>
+            ) : null}
+            {filteredOngoing.map((o) => (
               <Card key={o.id} className="border-2">
                 <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
                   <div>
@@ -159,7 +159,10 @@ export default function ClientHomePage() {
                     · {formatDeliveryCash(o.delivery_fee_usd, o.delivery_fee_lbp)} {dict.common.cash}
                   </p>
                   <LinkButton href={`/app/client/orders/${o.id}`} size="lg" className="touch-target">
-                    {dict.admin.details}
+                    {(o.status === "awaiting_confirmation" || o.status === "arrived") &&
+                    !o.client_confirmed
+                      ? dict.client.confirmAndRate
+                      : dict.admin.details}
                   </LinkButton>
                 </CardContent>
               </Card>

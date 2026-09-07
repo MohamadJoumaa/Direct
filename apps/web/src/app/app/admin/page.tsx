@@ -23,6 +23,8 @@ import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
 import type { Order } from "@/lib/demo-store";
 import { formatOrderNumber } from "@/lib/demo-store";
+import { OrderSearchField, useOrderSearch } from "@/components/order-search";
+import { orderPartyExtras } from "@/lib/order-search";
 
 function orderDriverId(order: Order) {
   return order.long_distance_driver_id ?? order.assigned_driver_id;
@@ -168,10 +170,16 @@ function OrdersTable({
   headers: { number: string; item: string; type: string; driver: string; status: string; fee: string };
   actions: (order: Order) => ReactNode;
 }) {
+  const { dict } = useI18n();
+  const { query, setQuery, showSearch, filtered } = useOrderSearch(orders, (o) =>
+    orderPartyExtras(o, profiles, { includeClientAlways: true }),
+  );
+
   return (
     <Card className="border-2">
-      <CardHeader>
+      <CardHeader className="flex flex-col gap-3">
         <CardTitle className="text-2xl">{title}</CardTitle>
+        <OrderSearchField show={showSearch} value={query} onChange={setQuery} />
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <Table>
@@ -187,7 +195,7 @@ function OrdersTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {orders.map((o) => {
+            {filtered.map((o) => {
               const driverId = orderDriverId(o);
               const driver = driverId ? profiles.find((p) => p.id === driverId) : null;
               return (
@@ -212,10 +220,10 @@ function OrdersTable({
                 </TableRow>
               );
             })}
-            {orders.length === 0 ? (
+            {filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-muted-foreground">
-                  {empty}
+                  {orders.length === 0 ? empty : dict.common.noOrderMatches}
                 </TableCell>
               </TableRow>
             ) : null}

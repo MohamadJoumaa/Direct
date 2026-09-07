@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Navigation, Phone } from "lucide-react";
+import { ArrowLeft, Navigation } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { DeliveryMap } from "@/components/delivery-map";
+import { LinkedContactCard } from "@/components/linked-contact";
 import { OrderReceipt } from "@/components/order-receipt";
-import { ProfilePhoto } from "@/components/profile-photo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth-context";
-import { formatOrderNumber, profilePhotoUrl } from "@/lib/demo-store";
+import { formatOrderNumber, profilePhotoUrl, publicClientInfo } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
 import { nextNavStop, openDrivingDirections } from "@/lib/maps-nav";
@@ -49,7 +49,7 @@ export default function DriverOrderPage() {
     );
   }
 
-  const client = state.profiles.find((p) => p.id === order.client_id);
+  const client = publicClientInfo(state, order, user.id);
   const isHistory = ["completed", "cancelled", "disputed"].includes(order.status);
 
   const warehouse = order.warehouse_id
@@ -82,31 +82,13 @@ export default function DriverOrderPage() {
           cashValue={`$${order.driver_cut_usd.toFixed(2)}`}
           people={
             client ? (
-              <div className="flex flex-wrap items-center gap-3 rounded-xl border-2 bg-muted/40 p-3">
-                <ProfilePhoto
-                  src={profilePhotoUrl(state, client.id)}
-                  name={client.full_name}
-                  className="size-12"
-                />
-                <div className="min-w-0 flex-1">
-                  <p>
-                    <strong>{dict.common.client}:</strong> {client.full_name}
-                  </p>
-                  <p>
-                    <strong>{dict.common.phone}:</strong> {client.phone}
-                  </p>
-                </div>
-                <Button
-                  nativeButton={false}
-                  render={<a href={`tel:${client.phone}`} />}
-                  size="lg"
-                  className="touch-target h-12 rounded-full px-6 text-base font-semibold"
-                  aria-label={`${dict.driver.callClient} ${client.phone}`}
-                >
-                  <Phone data-icon="inline-start" />
-                  {dict.driver.callClient}
-                </Button>
-              </div>
+              <LinkedContactCard
+                roleLabel={dict.common.client}
+                phoneLabel={dict.common.phone}
+                contact={client}
+                photoSrc={profilePhotoUrl(state, client.id)}
+                callLabel={dict.driver.callClient}
+              />
             ) : null
           }
         />
@@ -341,59 +323,61 @@ export default function DriverOrderPage() {
         </Card>
         )}
 
-        <DeliveryMap
-          markers={[
-            {
-              id: "p",
-              lat: order.pickup_lat,
-              lng: order.pickup_lng,
-              label: "Pickup",
-              place: order.pickup_address,
-              kind: "pickup",
-            },
-            ...(warehouse
-              ? [
-                  {
-                    id: "w",
-                    lat: warehouse.lat,
-                    lng: warehouse.lng,
-                    label: warehouse.name,
-                    place: warehouse.address,
-                    kind: "warehouse" as const,
-                  },
-                ]
-              : []),
-            {
-              id: "d",
-              lat: order.dropoff_lat,
-              lng: order.dropoff_lng,
-              label: dict.common.dropoff,
-              place: order.dropoff_address,
-              kind: "dropoff",
-            },
-            ...(liveLoc
-              ? [
-                  {
-                    id: "live",
-                    lat: liveLoc.lat,
-                    lng: liveLoc.lng,
-                    label: dict.common.yourDriver,
-                    kind: "live" as const,
-                  },
-                ]
-              : []),
-          ]}
-          route={[
-            { lat: order.pickup_lat, lng: order.pickup_lng },
-            ...(warehouse ? [{ lat: warehouse.lat, lng: warehouse.lng }] : []),
-            { lat: order.dropoff_lat, lng: order.dropoff_lng },
-          ]}
-          routeHint={
-            order.order_type === "long_distance"
-              ? "Route: pickup → warehouse → drop-off"
-              : "Best route to drop-off"
-          }
-        />
+        {isHistory ? null : (
+          <DeliveryMap
+            markers={[
+              {
+                id: "p",
+                lat: order.pickup_lat,
+                lng: order.pickup_lng,
+                label: "Pickup",
+                place: order.pickup_address,
+                kind: "pickup",
+              },
+              ...(warehouse
+                ? [
+                    {
+                      id: "w",
+                      lat: warehouse.lat,
+                      lng: warehouse.lng,
+                      label: warehouse.name,
+                      place: warehouse.address,
+                      kind: "warehouse" as const,
+                    },
+                  ]
+                : []),
+              {
+                id: "d",
+                lat: order.dropoff_lat,
+                lng: order.dropoff_lng,
+                label: dict.common.dropoff,
+                place: order.dropoff_address,
+                kind: "dropoff",
+              },
+              ...(liveLoc
+                ? [
+                    {
+                      id: "live",
+                      lat: liveLoc.lat,
+                      lng: liveLoc.lng,
+                      label: dict.common.yourDriver,
+                      kind: "live" as const,
+                    },
+                  ]
+                : []),
+            ]}
+            route={[
+              { lat: order.pickup_lat, lng: order.pickup_lng },
+              ...(warehouse ? [{ lat: warehouse.lat, lng: warehouse.lng }] : []),
+              { lat: order.dropoff_lat, lng: order.dropoff_lng },
+            ]}
+            routeHint={
+              order.order_type === "long_distance"
+                ? "Route: pickup → warehouse → drop-off"
+                : "Best route to drop-off"
+            }
+          />
+        )}
       </div>
     </AppShell>
   );

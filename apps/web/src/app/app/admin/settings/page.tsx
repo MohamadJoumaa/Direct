@@ -54,12 +54,12 @@ export default function AdminSettingsPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <Label className="text-lg">How we earn</Label>
+              <Label className="text-lg">Default for new drivers</Label>
               <Select
                 value={s.revenue_mode}
                 onValueChange={(v) => updateSettings({ revenue_mode: v as RevenueMode })}
                 items={[
-                  { label: "Driver monthly subscription (main)", value: "subscription" },
+                  { label: "Driver monthly subscription", value: "subscription" },
                   { label: "Percentage of each order", value: "percentage" },
                 ]}
               >
@@ -69,39 +69,37 @@ export default function AdminSettingsPage() {
                 <SelectContent>
                   <SelectGroup>
                     <SelectItem value="subscription">
-                      Driver monthly subscription (main)
+                      Driver monthly subscription
                     </SelectItem>
                     <SelectItem value="percentage">Percentage of each order</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
+              <p className="text-base text-muted-foreground">
+                Each driver can change this on their profile.
+              </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              {s.revenue_mode === "subscription" ? (
-                <>
-                  <Field
-                    label="Subscription $"
-                    value={s.subscription_price_usd}
-                    onChange={(v) => num("subscription_price_usd", v)}
-                  />
-                  <Field
-                    label="Grace days"
-                    value={s.grace_days}
-                    onChange={(v) => num("grace_days", v)}
-                  />
-                  <Field
-                    label="Freeze penalty $"
-                    value={s.freeze_penalty_usd}
-                    onChange={(v) => num("freeze_penalty_usd", v)}
-                  />
-                </>
-              ) : (
-                <Field
-                  label="Company %"
-                  value={s.company_percentage}
-                  onChange={(v) => num("company_percentage", v)}
-                />
-              )}
+              <Field
+                label="Subscription $"
+                value={s.subscription_price_usd}
+                onChange={(v) => num("subscription_price_usd", v)}
+              />
+              <Field
+                label="Grace days"
+                value={s.grace_days}
+                onChange={(v) => num("grace_days", v)}
+              />
+              <Field
+                label="Freeze penalty $"
+                value={s.freeze_penalty_usd}
+                onChange={(v) => num("freeze_penalty_usd", v)}
+              />
+              <Field
+                label="Company %"
+                value={s.company_percentage}
+                onChange={(v) => num("company_percentage", v)}
+              />
               <Field
                 label="Night surcharge $"
                 value={s.night_surcharge_usd}

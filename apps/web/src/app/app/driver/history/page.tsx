@@ -13,14 +13,27 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
-import { formatOrderNumber } from "@/lib/demo-store";
+import { formatOrderNumber, publicClientInfo } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { orderTypeLabel, useI18n } from "@/lib/i18n";
+import { OrderSearchField, useOrderSearch } from "@/components/order-search";
+import { orderPartyExtras } from "@/lib/order-search";
 
 export default function DriverHistoryPage() {
   const { user, driver } = useAuth();
   const { state } = useStore();
   const { dict } = useI18n();
+  const history =
+    user && driver
+      ? state.orders.filter(
+          (o) =>
+            (o.assigned_driver_id === user.id || o.long_distance_driver_id === user.id) &&
+            ["completed", "cancelled", "disputed"].includes(o.status),
+        )
+      : [];
+  const { query, setQuery, showSearch, filtered } = useOrderSearch(history, (o) =>
+    orderPartyExtras(o, state.profiles),
+  );
   if (!user || !driver) {
     return (
       <AppShell>
@@ -29,21 +42,18 @@ export default function DriverHistoryPage() {
     );
   }
 
-  const history = state.orders.filter(
-    (o) =>
-      (o.assigned_driver_id === user.id || o.long_distance_driver_id === user.id) &&
-      ["completed", "cancelled", "disputed"].includes(o.status),
-  );
-
   return (
     <AppShell title={dict.nav.history}>
       <Card className="border-2">
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-3">
           <CardTitle className="heading-easy">{dict.driver.pastJobs}</CardTitle>
+          <OrderSearchField show={showSearch} value={query} onChange={setQuery} />
         </CardHeader>
         <CardContent>
           {history.length === 0 ? (
             <p className="text-easy text-muted-foreground">{dict.driver.noCompleted}</p>
+          ) : filtered.length === 0 ? (
+            <p className="text-easy text-muted-foreground">{dict.common.noOrderMatches}</p>
           ) : (
             <Table>
               <TableHeader>
@@ -60,8 +70,8 @@ export default function DriverHistoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {history.map((o) => {
-                  const client = state.profiles.find((p) => p.id === o.client_id);
+                {filtered.map((o) => {
+                  const client = publicClientInfo(state, o, user.id);
                   return (
                     <TableRow key={o.id}>
                       <TableCell className="font-mono text-base font-semibold tabular-nums">

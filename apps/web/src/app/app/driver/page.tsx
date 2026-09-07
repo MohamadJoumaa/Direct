@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { DRIVER_TYPE_LABELS, WHISH_NUMBER } from "@direct/shared";
-import { availableOrdersForDriver, driverCommissionTotals, formatOrderNumber } from "@/lib/demo-store";
+import { availableOrdersForDriver, driverCommissionTotals, driverCompanyPayMode, formatOrderNumber } from "@/lib/demo-store";
 import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { DeliveryMap } from "@/components/delivery-map";
@@ -16,10 +16,12 @@ import { useStore } from "@/lib/store-context";
 import { orderTypeLabel, useI18n, fmt } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
 import { nextNavStop, openDrivingDirections } from "@/lib/maps-nav";
+import { OrderSearchField, useOrderSearch } from "@/components/order-search";
+import { orderPartyExtras } from "@/lib/order-search";
 
 export default function DriverHomePage() {
   const { user, driver: realDriver, isAdmin } = useAuth();
-  const { state, claimOrder, setOnline, requestPay } = useStore();
+  const { state, claimOrder, declineOffer, setOnline, requestPay } = useStore();
   const { dict } = useI18n();
   const [locError, setLocError] = useState<string | null>(null);
   const driver =
@@ -37,8 +39,31 @@ export default function DriverHomePage() {
           subscription_ends_at: null,
           admin_frozen: false,
           banned: false,
+          payment_waived: false,
+          revenue_mode: "subscription" as const,
         }
       : null);
+
+  const available = user ? availableOrdersForDriver(state, user.id) : [];
+  const active = user
+    ? state.orders.filter(
+        (o) =>
+          (o.assigned_driver_id === user.id || o.long_distance_driver_id === user.id) &&
+          !["completed", "cancelled", "disputed"].includes(o.status),
+      )
+    : [];
+  const {
+    query: activeQuery,
+    setQuery: setActiveQuery,
+    showSearch: showActiveSearch,
+    filtered: filteredActive,
+  } = useOrderSearch(active, (o) => orderPartyExtras(o, state.profiles));
+  const {
+    query: pendingQuery,
+    setQuery: setPendingQuery,
+    showSearch: showPendingSearch,
+    filtered: filteredAvailable,
+  } = useOrderSearch(available);
 
   if (!user || !driver) {
     return (
@@ -48,13 +73,7 @@ export default function DriverHomePage() {
     );
   }
 
-  const available = availableOrdersForDriver(state, user.id);
-  const active = state.orders.filter(
-    (o) =>
-      (o.assigned_driver_id === user.id || o.long_distance_driver_id === user.id) &&
-      !["completed", "cancelled", "disputed"].includes(o.status),
-  );
-  const percentageMode = state.settings.revenue_mode === "percentage";
+  const percentageMode = driverCompanyPayMode(driver, state.settings) === "percentage";
   const commissionDue = percentageMode
     ? driverCommissionTotals(state, user.id).dueNow
     : 0;
@@ -104,7 +123,7 @@ export default function DriverHomePage() {
           </Alert>
         ) : null}
 
-        {!isAdmin && percentageMode && commissionDue > 0 ? (
+        {!isAdmin && percentageMode && commissionDue > 0 && !driver.payment_waived ? (
           <Alert className="border-2 border-destructive">
             <AlertTitle className="text-xl">{dict.driver.commissionDue}</AlertTitle>
             <AlertDescription className="text-lg">
@@ -129,6 +148,17 @@ export default function DriverHomePage() {
         ) : null}
 
         {!isAdmin &&
+        driver.payment_waived &&
+        !driver.banned &&
+        !driver.admin_frozen ? (
+          <Alert className="border-2">
+            <AlertTitle className="text-xl">{dict.admin.statusWaived}</AlertTitle>
+            <AlertDescription className="text-lg">{dict.driver.paymentWaivedNotice}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {!isAdmin &&
+        !driver.payment_waived &&
         !percentageMode &&
         (driver.subscription_status === "frozen" ||
           driver.subscription_status === "pending_payment") ? (
@@ -177,7 +207,12 @@ export default function DriverHomePage() {
               {dict.driver.goOffline}
             </Button>
           ) : (
-            <Button size="lg" className="touch-target h-12 text-lg" onClick={goOnline}>
+            <Button
+              size="lg"
+              className="touch-target h-12 text-lg"
+              onClick={goOnline}
+              disabled={driver.banned || driver.admin_frozen}
+            >
               {dict.driver.goOnlineLocation}
             </Button>
           )}
@@ -187,10 +222,17 @@ export default function DriverHomePage() {
 
         <section className="flex flex-col gap-3">
           <h2 className="text-2xl font-bold">{dict.driver.activeJobs}</h2>
+          <OrderSearchField
+            show={showActiveSearch}
+            value={activeQuery}
+            onChange={setActiveQuery}
+          />
           {active.length === 0 ? (
             <p className="text-easy text-muted-foreground">{dict.driver.noActiveJobs}</p>
+          ) : filteredActive.length === 0 ? (
+            <p className="text-easy text-muted-foreground">{dict.common.noOrderMatches}</p>
           ) : (
-            active.map((o) => (
+            filteredActive.map((o) => (
               <Card key={o.id} className="border-2">
                 <CardHeader className="flex flex-row justify-between gap-2">
                   <div>
@@ -229,12 +271,19 @@ export default function DriverHomePage() {
 
         <section className="flex flex-col gap-3">
           <h2 className="text-2xl font-bold">{dict.driver.availableNearby}</h2>
+          <OrderSearchField
+            show={showPendingSearch}
+            value={pendingQuery}
+            onChange={setPendingQuery}
+          />
           {available.length === 0 ? (
             <p className="text-easy text-muted-foreground">
               {dict.driver.noMatching}
             </p>
+          ) : filteredAvailable.length === 0 ? (
+            <p className="text-easy text-muted-foreground">{dict.common.noOrderMatches}</p>
           ) : (
-            available.map((o) => (
+            filteredAvailable.map((o) => (
               <Card key={o.id} className="border-2 border-primary/30">
                 <CardHeader>
                   <p className="font-mono text-sm font-semibold tabular-nums text-muted-foreground">
@@ -250,17 +299,32 @@ export default function DriverHomePage() {
                   <p>
                     {orderTypeLabel(o.order_type, dict)} · ${o.driver_cut_usd.toFixed(2)}
                   </p>
-                  <Button
-                    size="lg"
-                    className="touch-target h-12 w-fit rounded-full px-6 text-base font-semibold"
-                    onClick={() => {
-                      const err = claimOrder(o.id, user.id);
-                      if (err) toast.error(err);
-                      else toast.success(dict.driver.youGotTheOrder);
-                    }}
-                  >
-                    {dict.driver.accept}
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="lg"
+                      className="touch-target h-12 w-fit rounded-full px-6 text-base font-semibold"
+                      onClick={() => {
+                        const err = claimOrder(o.id, user.id);
+                        if (err) toast.error(err);
+                        else toast.success(dict.driver.youGotTheOrder);
+                      }}
+                    >
+                      {dict.driver.accept}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="lg"
+                      className="touch-target h-12 w-fit rounded-full px-6 text-base font-semibold"
+                      onClick={() => {
+                        const err = declineOffer(o.id, user.id);
+                        if (err) toast.error(err);
+                        else toast.message(dict.driver.declinedToast);
+                      }}
+                    >
+                      {dict.driver.decline}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))
@@ -272,12 +336,12 @@ export default function DriverHomePage() {
             .filter((l) => state.drivers.find((d) => d.id === l.driver_id)?.is_online)
             .map((l) => {
               const d = state.drivers.find((x) => x.id === l.driver_id)!;
-              const p = state.profiles.find((x) => x.id === l.driver_id)!;
+              const isYou = l.driver_id === user.id;
               return {
                 id: l.driver_id,
                 lat: l.lat,
                 lng: l.lng,
-                label: p.full_name,
+                label: isYou ? dict.common.you : dict.common.nearbyDriver,
                 role: d.driver_type,
                 kind: "driver" as const,
               };

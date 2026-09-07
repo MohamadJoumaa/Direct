@@ -130,7 +130,7 @@ export default function HomePage() {
       <section id="send" className="mx-auto w-full max-w-6xl px-4 pb-16 pt-12 sm:pt-20">
         <div className="grid items-center gap-12 lg:grid-cols-2">
           <div className="flex flex-col gap-8">
-            <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
+            <h1 className="text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
               {dict.home.heroTitle1}
               <br />
               {dict.home.heroTitle2}
@@ -242,7 +242,7 @@ export default function HomePage() {
               icon: MapPin,
               title: dict.home.trackDelivery,
               text: dict.home.trackDeliveryBody,
-              href: user ? "/app/client/history" : "/login",
+              href: sendHref,
             },
             {
               icon: CarFront,
@@ -270,7 +270,7 @@ export default function HomePage() {
       </section>
 
       {/* Drive section */}
-      <section id="drive" className="border-y bg-[#0a0a0a] text-white">
+      <section id="drive" className="border-y bg-background text-foreground">
         <div className="mx-auto grid w-full max-w-6xl items-center gap-10 px-4 py-20 lg:grid-cols-2">
           <div className="flex flex-col gap-5">
             <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
@@ -278,18 +278,18 @@ export default function HomePage() {
               <br />
               {dict.home.driveTitle2}
             </h2>
-            <p className="max-w-md text-lg text-white/70">{dict.home.driveBody}</p>
+            <p className="max-w-md text-lg text-muted-foreground">{dict.home.driveBody}</p>
             <div className="flex flex-wrap gap-3">
               <LinkButton
                 href="/register?role=driver"
-                className="touch-target h-12 rounded-full bg-white px-7 text-base font-semibold text-black hover:bg-white/90"
+                className="touch-target h-12 rounded-full px-7 text-base font-semibold"
               >
                 {dict.home.signUpToDrive}
               </LinkButton>
               <LinkButton
                 href="/login?role=driver"
                 variant="ghost"
-                className="touch-target h-12 rounded-full px-7 text-base font-semibold text-white hover:bg-white/10 hover:text-white"
+                className="touch-target h-12 rounded-full px-7 text-base font-semibold"
               >
                 {dict.home.alreadyDriver}
               </LinkButton>

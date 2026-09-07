@@ -124,13 +124,12 @@ function NewOrderContent() {
     .filter((d) => d.is_online && d.driver_type === "fast")
     .map((d) => {
       const loc = state.locations.find((l) => l.driver_id === d.id);
-      const profile = state.profiles.find((p) => p.id === d.id);
-      if (!loc || !profile) return null;
+      if (!loc) return null;
       return {
         id: d.id,
         lat: loc.lat,
         lng: loc.lng,
-        label: profile.full_name,
+        label: dict.common.nearbyDriver,
         role: d.driver_type,
         kind: "driver" as const,
       };

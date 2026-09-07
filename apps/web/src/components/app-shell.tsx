@@ -48,6 +48,7 @@ import {
 
 function NotificationBell() {
   const { user } = useAuth();
+  const { dict } = useI18n();
   const { state, markNotificationRead } = useStore();
   if (!user) return null;
   const notifs = state.notifications.filter((n) => n.user_id === user.id);
@@ -74,7 +75,7 @@ function NotificationBell() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0">
         <div className="border-b px-4 py-3">
-          <p className="text-sm font-semibold">Notifications</p>
+          <p className="text-sm font-semibold">{dict.common.notifications}</p>
         </div>
         <div className="max-h-64 overflow-y-auto">
           {notifs.map((n) => (

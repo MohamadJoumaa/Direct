@@ -38,6 +38,7 @@ type StoreContextValue = {
     },
   ) => { error?: string; orderNumber?: number };
   claimOrder: (orderId: string, driverId: string) => string | undefined;
+  declineOffer: (orderId: string, driverId: string) => string | undefined;
   advanceOrder: (
     orderId: string,
     actorId: string,
@@ -106,6 +107,8 @@ type StoreContextValue = {
     driverId: string,
     action: demo.DriverAccountAction,
   ) => string | undefined;
+  setDriverPaymentWaived: (driverId: string, waived: boolean) => string | undefined;
+  setDriverRevenueMode: (driverId: string, mode: demo.Driver["revenue_mode"]) => string | undefined;
   addWarehouse: (input: { name: string; address: string; lat: number; lng: number }) => void;
   removeWarehouse: (warehouseId: string) => string | undefined;
   addWarehouseProduct: (input: {
@@ -161,6 +164,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       claimOrder: (orderId, driverId) => {
         const r = demo.claimOrder(state, orderId, driverId);
+        if (r.error) return r.error;
+        commit(r.state);
+      },
+      declineOffer: (orderId, driverId) => {
+        const r = demo.declineOffer(state, orderId, driverId);
         if (r.error) return r.error;
         commit(r.state);
       },
@@ -236,6 +244,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       setDriverAccountAction: (driverId, action) => {
         const r = demo.setDriverAccountAction(state, driverId, action);
+        if (r.error) return r.error;
+        commit(r.state);
+      },
+      setDriverPaymentWaived: (driverId, waived) => {
+        const r = demo.setDriverPaymentWaived(state, driverId, waived);
+        if (r.error) return r.error;
+        commit(r.state);
+      },
+      setDriverRevenueMode: (driverId, mode) => {
+        const r = demo.setDriverRevenueMode(state, driverId, mode);
         if (r.error) return r.error;
         commit(r.state);
       },

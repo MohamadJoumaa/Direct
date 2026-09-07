@@ -95,7 +95,7 @@ export default function AdminMoneyPage() {
             <CardContent>
               <p className="text-4xl font-bold text-primary">${pct.toFixed(2)}</p>
               <p className="text-base text-muted-foreground">
-                Mode: {state.settings.revenue_mode}
+                Drivers choose subscription or percentage on their profile.
               </p>
             </CardContent>
           </Card>

@@ -45,6 +45,7 @@ export default function AdminOrderDetailPage() {
   const warehouse = order.warehouse_id
     ? state.warehouses.find((w) => w.id === order.warehouse_id)
     : null;
+  const isHistory = ["completed", "cancelled", "disputed"].includes(order.status);
   const adminIsDriver = driverId === user.id;
   const claimable =
     order.status === "pending" ||
@@ -209,43 +210,45 @@ export default function AdminOrderDetailPage() {
           </CardContent>
         </Card>
 
-        <DeliveryMap
-          markers={[
-            {
-              id: "p",
-              lat: order.pickup_lat,
-              lng: order.pickup_lng,
-              label: "Pickup",
-              place: order.pickup_address,
-              kind: "pickup",
-            },
-            ...(warehouse
-              ? [
-                  {
-                    id: "w",
-                    lat: warehouse.lat,
-                    lng: warehouse.lng,
-                    label: warehouse.name,
-                    place: warehouse.address,
-                    kind: "warehouse" as const,
-                  },
-                ]
-              : []),
-            {
-              id: "d",
-              lat: order.dropoff_lat,
-              lng: order.dropoff_lng,
-              label: "Drop-off",
-              place: order.dropoff_address,
-              kind: "dropoff",
-            },
-          ]}
-          route={[
-            { lat: order.pickup_lat, lng: order.pickup_lng },
-            ...(warehouse ? [{ lat: warehouse.lat, lng: warehouse.lng }] : []),
-            { lat: order.dropoff_lat, lng: order.dropoff_lng },
-          ]}
-        />
+        {isHistory ? null : (
+          <DeliveryMap
+            markers={[
+              {
+                id: "p",
+                lat: order.pickup_lat,
+                lng: order.pickup_lng,
+                label: "Pickup",
+                place: order.pickup_address,
+                kind: "pickup",
+              },
+              ...(warehouse
+                ? [
+                    {
+                      id: "w",
+                      lat: warehouse.lat,
+                      lng: warehouse.lng,
+                      label: warehouse.name,
+                      place: warehouse.address,
+                      kind: "warehouse" as const,
+                    },
+                  ]
+                : []),
+              {
+                id: "d",
+                lat: order.dropoff_lat,
+                lng: order.dropoff_lng,
+                label: "Drop-off",
+                place: order.dropoff_address,
+                kind: "dropoff",
+              },
+            ]}
+            route={[
+              { lat: order.pickup_lat, lng: order.pickup_lng },
+              ...(warehouse ? [{ lat: warehouse.lat, lng: warehouse.lng }] : []),
+              { lat: order.dropoff_lat, lng: order.dropoff_lng },
+            ]}
+          />
+        )}
       </div>
     </AppShell>
   );

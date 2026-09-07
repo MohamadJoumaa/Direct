@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Camera, Star, ShieldCheck } from "lucide-react";
-import { formatDeliveryCash, withBusinessOrderCosts } from "@direct/shared";
+import { formatDeliveryCash, withBusinessOrderCosts, type RevenueMode } from "@direct/shared";
 import { AppShell } from "@/components/app-shell";
 import { ProfilePhoto } from "@/components/profile-photo";
 import { Badge } from "@/components/ui/badge";
@@ -13,48 +13,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
-import { profilePhotoUrl } from "@/lib/demo-store";
+import { profilePhotoUrl, driverCompanyPayMode } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, fmt } from "@/lib/i18n";
+import { fileToAvatar, fileToDocumentPreview } from "@/lib/image-file";
 import { locationLabel } from "@/lib/place-name";
+import { cn } from "@/lib/utils";
 
 const DOC_TYPES = ["selfie", "id", "vehicle_registration", "driver_license"] as const;
 
-/** Downscale the chosen image so the demo store stays small. */
-function fileToAvatar(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new window.Image();
-    img.onload = () => {
-      const size = 256;
-      const canvas = document.createElement("canvas");
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return reject(new Error("no canvas"));
-      const min = Math.min(img.width, img.height);
-      ctx.drawImage(
-        img,
-        (img.width - min) / 2,
-        (img.height - min) / 2,
-        min,
-        min,
-        0,
-        0,
-        size,
-        size,
-      );
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", 0.8));
-    };
-    img.onerror = reject;
-    img.src = url;
-  });
-}
-
 export default function ProfilePage() {
   const { user, driver } = useAuth();
-  const { state, updateProfile, addDocument } = useStore();
+  const { state, updateProfile, addDocument, setDriverRevenueMode } = useStore();
   const { dict } = useI18n();
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -89,6 +59,17 @@ export default function ProfilePage() {
       return;
     }
     toast.success(dict.profile.saved);
+  }
+
+  function onPayPlan(mode: RevenueMode) {
+    if (!driver || !user) return;
+    if (driverCompanyPayMode(driver, state.settings) === mode) return;
+    const err = setDriverRevenueMode(user.id, mode);
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    toast.success(dict.profile.payPlanSaved);
   }
 
   async function onAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -255,6 +236,62 @@ export default function ProfilePage() {
         {driver ? (
           <Card className="border-2">
             <CardHeader>
+              <CardTitle className="text-2xl">{dict.profile.companyPayTitle}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <p className="text-base text-muted-foreground">{dict.profile.companyPayHint}</p>
+              <div
+                role="radiogroup"
+                aria-labelledby="pf-pay-plan"
+                className="grid gap-3 sm:grid-cols-2"
+              >
+                <span id="pf-pay-plan" className="sr-only">
+                  {dict.profile.companyPayTitle}
+                </span>
+                {(
+                  [
+                    {
+                      value: "subscription" as const,
+                      title: dict.profile.payPlanSubscription,
+                      desc: fmt(dict.profile.payPlanSubscriptionDesc, {
+                        price: state.settings.subscription_price_usd,
+                      }),
+                    },
+                    {
+                      value: "percentage" as const,
+                      title: dict.profile.payPlanPercentage,
+                      desc: fmt(dict.profile.payPlanPercentageDesc, {
+                        pct: state.settings.company_percentage,
+                      }),
+                    },
+                  ] as const
+                ).map((opt) => {
+                  const selected = driverCompanyPayMode(driver, state.settings) === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => onPayPlan(opt.value)}
+                      className={cn(
+                        "touch-target flex min-h-11 flex-col items-start gap-1 rounded-xl border-2 p-4 text-start transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                        selected ? "border-primary bg-muted" : "border-border",
+                      )}
+                    >
+                      <span className="text-lg font-semibold">{opt.title}</span>
+                      <span className="text-base text-muted-foreground">{opt.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {driver ? (
+          <Card className="border-2">
+            <CardHeader>
               <CardTitle className="text-2xl">{dict.profile.legalDocuments}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
@@ -297,7 +334,11 @@ export default function ProfilePage() {
                             if (!file) return;
                             let fileData: string | undefined;
                             if (file.type.startsWith("image/")) {
-                              fileData = await fileToAvatar(file);
+                              fileData = await fileToDocumentPreview(file);
+                              if (docType === "selfie") {
+                                const avatar = await fileToAvatar(file);
+                                updateProfile(user.id, { avatar_url: avatar });
+                              }
                             }
                             addDocument(user.id, docType, file.name, fileData);
                             toast.success(dict.profile.uploadedToast);

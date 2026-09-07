@@ -9,6 +9,7 @@ export function reviewStatusLabel(status: DriverReviewStatus, dict: Dictionary) 
   if (status === "grace") return dict.admin.statusGrace;
   if (status === "frozen") return dict.admin.statusFrozen;
   if (status === "banned") return dict.admin.statusBanned;
+  if (status === "waived") return dict.admin.statusWaived;
   return dict.admin.statusUnpaid;
 }
 
@@ -30,7 +31,7 @@ export function ReviewStatusBadge({
       ? "destructive"
       : status === "frozen" || status === "unpaid"
         ? "outline"
-        : status === "grace"
+        : status === "grace" || status === "waived"
           ? "secondary"
           : "default";
   return (

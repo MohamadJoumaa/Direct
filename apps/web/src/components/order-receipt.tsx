@@ -18,6 +18,7 @@ export function OrderReceipt({
   cashValue,
   extraCashLines,
   people,
+  actions,
 }: {
   order: Order;
   warehouse?: Warehouse | null;
@@ -25,6 +26,7 @@ export function OrderReceipt({
   cashValue: string;
   extraCashLines?: ExtraLine[];
   people?: ReactNode;
+  actions?: ReactNode;
 }) {
   const { dict, lang } = useI18n();
   const placed = new Date(order.created_at).toLocaleString(lang === "ar" ? "ar-LB" : "en-GB", {
@@ -96,6 +98,8 @@ export function OrderReceipt({
         </div>
 
         {people ? <div className="flex flex-col gap-3">{people}</div> : null}
+
+        {actions ? <div className="flex flex-col gap-4 border-t-2 border-dashed pt-4">{actions}</div> : null}
       </div>
     </article>
   );

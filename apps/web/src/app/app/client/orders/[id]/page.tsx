@@ -7,8 +7,8 @@ import { formatDeliveryCash } from "@direct/shared";
 import { formatOrderNumber, publicDriverInfo, publicDriverLabel, profilePhotoUrl } from "@/lib/demo-store";
 import { AppShell } from "@/components/app-shell";
 import { DeliveryMap } from "@/components/delivery-map";
+import { LinkedContactCard } from "@/components/linked-contact";
 import { OrderReceipt } from "@/components/order-receipt";
-import { ProfilePhoto } from "@/components/profile-photo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
@@ -33,13 +33,17 @@ export default function ClientOrderDetailPage() {
     );
   }
 
+  const isHistory = ["completed", "cancelled", "disputed"].includes(order.status);
+  // Clients never learn an admin took the order unless they picked the Direct team.
+  const driverInfo = publicDriverInfo(state, order);
   const driverId = activeDriverId(order);
-  const loc = driverId ? state.locations.find((l) => l.driver_id === driverId) : null;
+  const loc =
+    driverInfo.kind !== "none" && driverId
+      ? state.locations.find((l) => l.driver_id === driverId)
+      : null;
   const warehouse = order.warehouse_id
     ? state.warehouses.find((w) => w.id === order.warehouse_id)
     : null;
-  // Clients never learn an admin took the order unless they picked the Direct team.
-  const driverInfo = publicDriverInfo(state, order);
 
   function onConfirm() {
     if (!user) return;
@@ -60,26 +64,54 @@ export default function ClientOrderDetailPage() {
           warehouse={warehouse}
           cashLabel={dict.common.cash}
           cashValue={formatDeliveryCash(order.delivery_fee_usd, order.delivery_fee_lbp)}
+          actions={
+            (order.status === "awaiting_confirmation" || order.status === "arrived") &&
+            !order.client_confirmed ? (
+              <>
+                <p className="text-easy">{dict.client.howWasDriver}</p>
+                <div className="flex flex-wrap gap-2">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Button
+                      key={n}
+                      type="button"
+                      size="lg"
+                      variant={stars === n ? "default" : "outline"}
+                      className="touch-target size-14 text-xl"
+                      onClick={() => setStars(n)}
+                    >
+                      {n}
+                    </Button>
+                  ))}
+                </div>
+                <Button size="lg" className="touch-target h-14 text-xl w-fit" onClick={onConfirm}>
+                  {dict.client.confirmReceived}
+                </Button>
+              </>
+            ) : null
+          }
           people={
             driverInfo.kind === "none" ? (
               <p className="text-muted-foreground">{dict.common.waitingForDriver}</p>
+            ) : driverInfo.kind === "direct" && driverInfo.contact ? (
+              <LinkedContactCard
+                roleLabel={dict.common.directTeam}
+                phoneLabel={dict.common.phone}
+                contact={driverInfo.contact}
+                photoSrc={profilePhotoUrl(state, driverInfo.contact.id)}
+                callLabel={dict.client.callDriver}
+              />
             ) : driverInfo.kind === "direct" ? (
               <p>
                 <strong>{dict.common.driver}:</strong> {dict.common.directTeam}
-                {driverInfo.profile ? ` · ${driverInfo.profile.phone}` : ""}
               </p>
-            ) : driverInfo.profile ? (
-              <div className="flex items-center gap-3 rounded-xl border-2 bg-muted/40 p-3">
-                <ProfilePhoto
-                  src={profilePhotoUrl(state, driverInfo.profile.id)}
-                  name={driverInfo.profile.full_name}
-                  className="size-12"
-                />
-                <p>
-                  <strong>{dict.common.driver}:</strong> {driverInfo.profile.full_name} ·{" "}
-                  {driverInfo.profile.phone}
-                </p>
-              </div>
+            ) : driverInfo.contact ? (
+              <LinkedContactCard
+                roleLabel={dict.common.driver}
+                phoneLabel={dict.common.phone}
+                contact={driverInfo.contact}
+                photoSrc={profilePhotoUrl(state, driverInfo.contact.id)}
+                callLabel={dict.client.callDriver}
+              />
             ) : (
               <p>
                 <strong>{dict.common.driver}:</strong> {dict.common.yourDriver}
@@ -117,88 +149,61 @@ export default function ClientOrderDetailPage() {
           </Card>
         )}
 
-        {(order.status === "awaiting_confirmation" || order.status === "arrived") &&
-        !order.client_confirmed ? (
-          <Card className="border-2 bg-muted">
-            <CardHeader>
-              <CardTitle className="text-2xl">Confirm delivery</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <p className="text-easy">How was the driver?</p>
-              <div className="flex flex-wrap gap-2">
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <Button
-                    key={n}
-                    type="button"
-                    size="lg"
-                    variant={stars === n ? "default" : "outline"}
-                    className="touch-target size-14 text-xl"
-                    onClick={() => setStars(n)}
-                  >
-                    {n}
-                  </Button>
-                ))}
-              </div>
-              <Button size="lg" className="touch-target h-14 text-xl w-fit" onClick={onConfirm}>
-                Confirm received
-              </Button>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <DeliveryMap
-          markers={[
-            {
-              id: "p",
-              lat: order.pickup_lat,
-              lng: order.pickup_lng,
-              label: dict.common.pickup,
-              place: order.pickup_address,
-              kind: "pickup",
-            },
-            {
-              id: "d",
-              lat: order.dropoff_lat,
-              lng: order.dropoff_lng,
-              label: dict.common.dropoff,
-              place: order.dropoff_address,
-              kind: "dropoff",
-            },
-            ...(warehouse
-              ? [
-                  {
-                    id: "w",
-                    lat: warehouse.lat,
-                    lng: warehouse.lng,
-                    label: warehouse.name,
-                    place: warehouse.address,
-                    kind: "warehouse" as const,
-                  },
-                ]
-              : []),
-            ...(loc
-              ? [
-                  {
-                    id: "live",
-                    lat: loc.lat,
-                    lng: loc.lng,
-                    label: publicDriverLabel(state, order, {
-                      waiting: dict.common.waitingForDriver,
-                      directTeam: dict.common.directTeam,
-                      yourDriver: dict.common.yourDriver,
-                    }),
-                    kind: "live" as const,
-                  },
-                ]
-              : []),
-          ]}
-          route={trackingRoute(
-            order,
-            loc ? { lat: loc.lat, lng: loc.lng } : null,
-            warehouse,
-          )}
-          routeHint={loc ? dict.client.trackingHint : dict.client.followHint}
-        />
+        {isHistory ? null : (
+          <DeliveryMap
+            markers={[
+              {
+                id: "p",
+                lat: order.pickup_lat,
+                lng: order.pickup_lng,
+                label: dict.common.pickup,
+                place: order.pickup_address,
+                kind: "pickup",
+              },
+              {
+                id: "d",
+                lat: order.dropoff_lat,
+                lng: order.dropoff_lng,
+                label: dict.common.dropoff,
+                place: order.dropoff_address,
+                kind: "dropoff",
+              },
+              ...(warehouse
+                ? [
+                    {
+                      id: "w",
+                      lat: warehouse.lat,
+                      lng: warehouse.lng,
+                      label: warehouse.name,
+                      place: warehouse.address,
+                      kind: "warehouse" as const,
+                    },
+                  ]
+                : []),
+              ...(loc
+                ? [
+                    {
+                      id: "live",
+                      lat: loc.lat,
+                      lng: loc.lng,
+                      label: publicDriverLabel(state, order, {
+                        waiting: dict.common.waitingForDriver,
+                        directTeam: dict.common.directTeam,
+                        yourDriver: dict.common.yourDriver,
+                      }),
+                      kind: "live" as const,
+                    },
+                  ]
+                : []),
+            ]}
+            route={trackingRoute(
+              order,
+              loc ? { lat: loc.lat, lng: loc.lng } : null,
+              warehouse,
+            )}
+            routeHint={loc ? dict.client.trackingHint : dict.client.followHint}
+          />
+        )}
       </div>
     </AppShell>
   );
