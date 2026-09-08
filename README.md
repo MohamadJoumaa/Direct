@@ -32,7 +32,7 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Structure
 
 - `apps/web` — Next.js App Router UI
-- `packages/shared` — roles, pricing, Zod schemas, ETA helpers
+- `packages/shared` — roles, pricing, Zod schemas, ETA helpers, [driver payment rules](packages/shared/src/payment-rules.md)
 - `supabase/migrations` — Postgres schema, RLS, `claim_order`, nearby drivers
 - `apps/mobile` — Expo placeholder (Phase 2)
 - `design-system/direct-delivery` — UI source of truth
@@ -51,12 +51,12 @@ Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`. Without it, the map panel shows markers a
 
 ## Whish
 
-Drivers pay the monthly subscription (plus freeze penalty when frozen) with **Whish Pay merchant collect**, not a freeform P2P transfer to a phone number.
+Drivers pay with **Whish Pay merchant collect**, not a freeform P2P transfer to a phone number. The same success-only rules apply to **subscription** and **commission** (percentage settle). Web and future Expo must import `@direct/shared` helpers — see [`packages/shared/src/payment-rules.md`](packages/shared/src/payment-rules.md).
 
 1. The driver taps **Pay with Whish**. The server calls `POST /payment/whish` with `WHISH_CHANNEL` / `WHISH_SECRET` / `WHISH_WEBSITE_URL`.
 2. The driver completes payment on the Whish page (phone + OTP).
-3. The app polls `POST /payment/collect/status` by `externalId`. When `collectStatus === success`, the subscription unlocks — no admin confirm.
-4. Redirects return to the driver dashboard; the callback only re-checks collect status (it is never trusted alone).
+3. The app polls `POST /payment/collect/status` by `externalId`. Unlock **only** when `collectStatus === "success"` (exact string) — opening the pay URL, leaving without paying, pending, failed, or unknown does not unlock.
+4. Redirects return to the driver dashboard; the callback only re-checks collect status. Callback / redirect alone is **never** payment proof.
 
 The company Whish number in Settings is contact/support info only. It is **not** used to verify payment.
 
@@ -66,4 +66,7 @@ Copy `apps/web/.env.example` → `apps/web/.env.local` and fill `WHISH_*` to tes
 
 ## Revenue modes
 
-Admin → Settings: switch between **subscription** (default) and **percentage of order**. Delivery fees are driver profit under subscription mode.
+Admin → Settings: **subscription** (default) or **percentage of order**.
+
+- **Subscription** — delivery fees stay with the driver. Access is a monthly Whish collect (plus freeze penalty when frozen). Unpaid / frozen drivers cannot claim or go online until collect status is `success` (or admin confirm / waiver).
+- **Percentage** — the company cut from each completed order accrues during the current Beirut work day (**07:00 → 07:00 Asia/Beirut**). At/after 07:00, yesterday’s cuts (plus any unpaid backlog) become **due now**. Today’s cuts stay accruing until the next 07:00. The driver pays that `dueNow` with the **same Whish collect → success-only unlock** to keep claiming orders and going online. There is no cron: `workDayStart()` is evaluated on every claim / go-online / payment check.

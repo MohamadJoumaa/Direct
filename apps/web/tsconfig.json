@@ -28,5 +28,5 @@
     "**/*.mts",
     "../../packages/shared/src/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+    "exclude": ["node_modules", "../../packages/shared/src/**/*.test.ts"]
 }

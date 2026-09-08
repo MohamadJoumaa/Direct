@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { WHISH_COLLECT_CREATE_PATH, WHISH_COLLECT_CURRENCY } from "@direct/shared";
 import {
   callbackUrl,
   collectPayUrl,
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
   const appOrigin = resolveAppOrigin(req, body.returnOrigin);
 
   try {
-    const res = await fetch(`${env.baseUrl}/payment/whish`, {
+    const res = await fetch(`${env.baseUrl}${WHISH_COLLECT_CREATE_PATH}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         amount,
-        currency: "USD",
+        currency: WHISH_COLLECT_CURRENCY,
         invoice: body.note ?? "Direct driver subscription",
         externalId,
         successCallbackUrl: callbackUrl(appOrigin, externalId, "success"),

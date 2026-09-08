@@ -9,6 +9,7 @@
     "dev": "npm run dev -w @direct/web",
     "build": "npm run build -w @direct/web",
     "lint": "npm run lint -w @direct/web",
+    "test:shared": "npm run test -w @direct/shared",
     "db:reset": "npx supabase db reset"
   },
   "engines": {

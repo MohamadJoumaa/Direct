@@ -1,9 +1,23 @@
 /**
  * Server-only Whish Pay (merchant collect) helpers.
  * Verification is collect + /payment/collect/status by externalId — never P2P phone inquiry.
+ * Unlock uses `isWhishCollectPaid` from `@direct/shared` (exact `success` only).
  */
 
-export const WHISH_MAX_AMOUNT_USD = 10_000;
+import {
+  WHISH_COLLECT_CURRENCY,
+  WHISH_COLLECT_STATUS_PATH,
+  extractCollectPayUrl,
+  isWhishCollectPaid,
+  parseCollectAmountUsd,
+} from "@direct/shared";
+
+export {
+  WHISH_MAX_AMOUNT_USD,
+} from "@direct/shared";
+
+export const parseCollectAmount = parseCollectAmountUsd;
+export const collectPayUrl = extractCollectPayUrl;
 
 export type WhishEnv = {
   channel: string;
@@ -24,14 +38,6 @@ export function getWhishEnv(): WhishEnv | null {
       process.env.WHISH_BASE_URL ??
       "https://lb.sandbox.whish.money/itel-service/api",
   };
-}
-
-export function parseCollectAmount(value: unknown): number | null {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount <= 0 || amount > WHISH_MAX_AMOUNT_USD) {
-    return null;
-  }
-  return Math.round(amount * 100) / 100;
 }
 
 export function originFromRequest(req: Request): string {
@@ -64,23 +70,6 @@ export function resolveAppOrigin(req: Request, clientOrigin?: string): string {
   return envOrigin || requestOrigin;
 }
 
-export function collectPayUrl(payload: unknown): string | null {
-  const root =
-    payload && typeof payload === "object"
-      ? (payload as Record<string, unknown>)
-      : null;
-  const data =
-    root?.data && typeof root.data === "object"
-      ? (root.data as Record<string, unknown>)
-      : root;
-  if (!data) return null;
-  for (const key of ["collectUrl", "whishUrl", "url", "paymentUrl", "payUrl"]) {
-    const value = data[key];
-    if (typeof value === "string" && /^https?:\/\//i.test(value)) return value;
-  }
-  return null;
-}
-
 export function parseExternalId(value: unknown): number | null {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -91,7 +80,7 @@ export async function fetchCollectStatus(
   env: WhishEnv,
   externalId: number,
 ): Promise<{ paid: boolean; status: string }> {
-  const res = await fetch(`${env.baseUrl}/payment/collect/status`, {
+  const res = await fetch(`${env.baseUrl}${WHISH_COLLECT_STATUS_PATH}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -99,7 +88,7 @@ export async function fetchCollectStatus(
       secret: env.secret,
       websiteurl: env.websiteUrl,
     },
-    body: JSON.stringify({ currency: "USD", externalId }),
+    body: JSON.stringify({ currency: WHISH_COLLECT_CURRENCY, externalId }),
     cache: "no-store",
   });
   const data: unknown = await res.json().catch(() => null);
@@ -108,7 +97,7 @@ export async function fetchCollectStatus(
       ? (data as { data?: { collectStatus?: string } }).data?.collectStatus
       : undefined;
   return {
-    paid: status === "success",
+    paid: isWhishCollectPaid(status),
     status: status ?? "unknown",
   };
 }

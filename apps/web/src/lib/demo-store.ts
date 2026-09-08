@@ -10,6 +10,9 @@ import {
   splitRevenue,
   validateBusinessOrderCosts,
   withBusinessOrderCosts,
+  classifyCommissionCut,
+  commissionDueNowUsd,
+  isDriverPaymentBlockingWork,
   workDayStart,
   type BusinessOrderCosts,
   type CompanySettings,
@@ -76,18 +79,28 @@ export type DriverReviewStatus = "paid" | "grace" | "frozen" | "banned" | "unpai
 export type DriverPayMethod = "whish" | "whish_manual" | "none";
 
 export function driverWouldBePaymentBlocked(state: DemoState | undefined, driver: Driver): boolean {
-  if (driverCompanyPayMode(driver, state?.settings) === "percentage") {
-    return state ? driverCommissionTotals(state, driver.id).dueNow > 0 : false;
-  }
-  return (
-    driver.subscription_status === "frozen" ||
-    driver.subscription_status === "pending_payment"
-  );
+  const mode = driverCompanyPayMode(driver, state?.settings);
+  const dueNowUsd =
+    mode === "percentage" && state
+      ? driverCommissionTotals(state, driver.id).dueNow
+      : 0;
+  return isDriverPaymentBlockingWork({
+    revenueMode: mode,
+    dueNowUsd,
+    subscriptionStatus: driver.subscription_status,
+  });
 }
 
 export function driverPaymentBlocked(state: DemoState, driver: Driver): boolean {
-  if (driver.payment_waived) return false;
-  return driverWouldBePaymentBlocked(state, driver);
+  const mode = driverCompanyPayMode(driver, state.settings);
+  const dueNowUsd =
+    mode === "percentage" ? driverCommissionTotals(state, driver.id).dueNow : 0;
+  return isDriverPaymentBlockingWork({
+    revenueMode: mode,
+    paymentWaived: driver.payment_waived,
+    dueNowUsd,
+    subscriptionStatus: driver.subscription_status,
+  });
 }
 
 export function driverReviewStatus(driver: Driver, state?: DemoState): DriverReviewStatus {
@@ -1299,6 +1312,23 @@ export function setOnline(
   if (online && row?.admin_frozen) {
     return { state, error: "Your account is frozen by an admin" };
   }
+  if (online && row && driverPaymentBlocked(next, row)) {
+    if (driverCompanyPayMode(row, next.settings) === "percentage") {
+      const due = driverCommissionTotals(next, driverId).dueNow;
+      return {
+        state,
+        error: `Pay yesterday's company cut ($${due.toFixed(2)}) via Whish first`,
+      };
+    }
+    if (row.subscription_status === "frozen") {
+      const penalty = next.settings.freeze_penalty_usd;
+      return {
+        state,
+        error: `Your account is frozen. Pay subscription + $${penalty} to reactivate.`,
+      };
+    }
+    return { state, error: "Pay your subscription first" };
+  }
   next = {
     ...next,
     drivers: next.drivers.map((d) =>
@@ -1654,6 +1684,7 @@ function earningDriverId(order: Order): string | null {
   return order.long_distance_driver_id ?? order.assigned_driver_id;
 }
 
+/** Previous Beirut work day (and older unpaid cuts) vs current 07:00→07:00 accruals. */
 export function driverCommissionTotals(
   state: DemoState,
   driverId: string,
@@ -1666,7 +1697,7 @@ export function driverCommissionTotals(
     if (o.status !== "completed" && o.status !== "disputed") continue;
     if (earningDriverId(o) !== driverId || !o.completed_at) continue;
     const t = new Date(o.completed_at).getTime();
-    if (t < startMs) due += o.company_cut_usd;
+    if (classifyCommissionCut(t, startMs) === "due") due += o.company_cut_usd;
     else accruing += o.company_cut_usd;
   }
   const paid = state.whish
@@ -1678,7 +1709,7 @@ export function driverCommissionTotals(
     )
     .reduce((s, tx) => s + tx.amount_usd, 0);
   return {
-    dueNow: Math.round(Math.max(0, due - paid) * 100) / 100,
+    dueNow: commissionDueNowUsd(due, paid),
     accruingToday: Math.round(accruing * 100) / 100,
   };
 }
