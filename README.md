@@ -51,7 +51,18 @@ Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`. Without it, the map panel shows markers a
 
 ## Whish
 
-Drivers pay subscription to **81848663**. Admin confirms in **Budget → Whish**, or wire `WHISH_*` when merchant credentials are ready.
+Drivers pay the monthly subscription (plus freeze penalty when frozen) with **Whish Pay merchant collect**, not a freeform P2P transfer to a phone number.
+
+1. The driver taps **Pay with Whish**. The server calls `POST /payment/whish` with `WHISH_CHANNEL` / `WHISH_SECRET` / `WHISH_WEBSITE_URL`.
+2. The driver completes payment on the Whish page (phone + OTP).
+3. The app polls `POST /payment/collect/status` by `externalId`. When `collectStatus === success`, the subscription unlocks — no admin confirm.
+4. Redirects return to the driver dashboard; the callback only re-checks collect status (it is never trusted alone).
+
+The company Whish number in Settings is contact/support info only. It is **not** used to verify payment.
+
+If `WHISH_CHANNEL` / `WHISH_SECRET` are unset, **Pay with Whish** tells the driver to pay manually and **I already paid** logs a pending tx for an admin to confirm in **Budget → Whish**.
+
+Copy `apps/web/.env.example` → `apps/web/.env.local` and fill `WHISH_*` to test against sandbox credentials. Collect amounts are capped at $10,000 so subscription + freeze penalty still fit.
 
 ## Revenue modes
 

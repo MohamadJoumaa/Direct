@@ -1,4 +1,12 @@
 import { NextResponse } from "next/server";
+import {
+  callbackUrl,
+  collectPayUrl,
+  dashboardReturnUrl,
+  getWhishEnv,
+  parseCollectAmount,
+  resolveAppOrigin,
+} from "@/lib/whish-server";
 
 /**
  * Creates a Whish Pay collect request. The secret stays on the server.
@@ -6,63 +14,73 @@ import { NextResponse } from "next/server";
  * and the client falls back to the manual pay-then-admin-confirm flow.
  */
 export async function POST(req: Request) {
-  const channel = process.env.WHISH_CHANNEL;
-  const secret = process.env.WHISH_SECRET;
-  const websiteUrl = process.env.WHISH_WEBSITE_URL ?? "https://direct.delivery";
-  const baseUrl =
-    process.env.WHISH_BASE_URL ?? "https://lb.sandbox.whish.money/itel-service/api";
-
-  if (!channel || !secret) {
+  const env = getWhishEnv();
+  if (!env) {
     return NextResponse.json({ configured: false });
   }
 
-  let body: { amount?: number; note?: string };
+  let body: { amount?: number; note?: string; returnOrigin?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const amount = Number(body.amount);
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 1000) {
+  const amount = parseCollectAmount(body.amount);
+  if (amount == null) {
     return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
   }
 
-  const externalId = Date.now();
+  const externalId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+  const appOrigin = resolveAppOrigin(req, body.returnOrigin);
 
   try {
-    const res = await fetch(`${baseUrl}/payment/whish`, {
+    const res = await fetch(`${env.baseUrl}/payment/whish`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        channel,
-        secret,
-        websiteurl: websiteUrl,
+        channel: env.channel,
+        secret: env.secret,
+        websiteurl: env.websiteUrl,
       },
       body: JSON.stringify({
         amount,
         currency: "USD",
         invoice: body.note ?? "Direct driver subscription",
         externalId,
-        successCallbackUrl: `${websiteUrl}/api/whish/status`,
-        failureCallbackUrl: `${websiteUrl}/api/whish/status`,
-        successRedirectUrl: websiteUrl,
-        failureRedirectUrl: websiteUrl,
+        successCallbackUrl: callbackUrl(appOrigin, externalId, "success"),
+        failureCallbackUrl: callbackUrl(appOrigin, externalId, "failure"),
+        successRedirectUrl: dashboardReturnUrl(appOrigin, externalId, "return"),
+        failureRedirectUrl: dashboardReturnUrl(appOrigin, externalId, "failed"),
       }),
       cache: "no-store",
     });
-    const data = await res.json();
-    if (!res.ok || data?.status === false) {
+    const data: unknown = await res.json().catch(() => null);
+    const failed =
+      !res.ok ||
+      (data &&
+        typeof data === "object" &&
+        (data as { status?: boolean }).status === false);
+    if (failed) {
+      const message =
+        data && typeof data === "object"
+          ? (data as { dialog?: { message?: string } }).dialog?.message
+          : undefined;
       return NextResponse.json(
-        { error: data?.dialog?.message ?? "Whish rejected the request" },
+        { error: message ?? "Whish rejected the request" },
         { status: 502 },
       );
     }
+    const payUrl = collectPayUrl(data);
     return NextResponse.json({
       configured: true,
       externalId: String(externalId),
-      collectUrl: data?.data?.collectUrl ?? null,
-      whishId: data?.data?.whishId ?? null,
+      collectUrl: payUrl,
+      whishUrl: payUrl,
+      whishId:
+        data && typeof data === "object"
+          ? ((data as { data?: { whishId?: string } }).data?.whishId ?? null)
+          : null,
     });
   } catch {
     return NextResponse.json({ error: "Whish is unreachable" }, { status: 502 });

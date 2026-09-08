@@ -257,7 +257,27 @@ export const en = {
     paidLogged: "Logged — waiting for confirmation",
     profileRequired: "Driver profile required.",
     subscriptionNeeded: "Subscription needed",
+    subscriptionNeededBody:
+      "Pay ${amount} with Whish Pay to unlock claiming orders. You will enter your phone and OTP on Whish’s page.",
+    freezePenaltyNote: "Includes ${penalty} freeze penalty.",
+    amountDue: "Amount due: ${amount}",
+    waitingForPayment: "Waiting for Whish payment — this page checks automatically.",
+    checkingPayment: "Working…",
+    whishOpened: "Finish payment on Whish (phone + OTP), then return here.",
+    whishOpenedNoUrl:
+      "Payment created. Use Check payment after you finish in the Whish app.",
+    whishNotConfigured:
+      "Whish Pay is not configured. Pay manually, then tap “I already paid” so an admin can confirm.",
+    whishUnreachable:
+      "Whish is unreachable. Pay manually, then tap “I already paid” so an admin can confirm.",
+    whishCreateFailed: "Could not start Whish payment. Try again or use “I already paid”.",
+    whishPayFailed: "Whish reported a failed payment. You can try again.",
+    couldNotCheckPayment: "Could not check the payment right now",
+    whishSupportNumber:
+      "Direct Whish {number} is for support. Payment is verified through Whish Pay, not by sending to this number.",
     gracePeriod: "Grace period",
+    graceRenewBody:
+      "Renew soon or your account freezes after {days} days. You can pay now with Whish Pay.",
     driverOrders: "Driver orders",
     goOnlineLocation: "Go online (location on)",
     activeJobs: "Active",
@@ -278,7 +298,7 @@ export const en = {
     yourPay: "Your pay",
     commissionDue: "Company cut due",
     commissionDueBody:
-      "Pay ${amount} via Whish to {number} before you can take new orders. Then tap “I paid”.",
+      "Pay ${amount} with Whish Pay before you can take new orders. You will enter your phone and OTP on Whish’s page.",
     dueNow: "Due now",
     accruingToday: "Accruing today",
     accruingTodayHint: "Not due until 7:00 AM Beirut",

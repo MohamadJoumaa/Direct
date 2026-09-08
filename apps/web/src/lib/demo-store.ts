@@ -663,11 +663,17 @@ function migrateState(parsed: DemoState): DemoState {
       order_number: typeof o.order_number === "number" ? o.order_number : 0,
     })),
     next_order_number: parsed.next_order_number ?? FIRST_PUBLIC_ORDER_NUMBER,
-    whish: (parsed.whish ?? []).map((t) => ({
-      ...t,
-      kind: t.kind === "commission" ? "commission" : "subscription",
-      external_id: t.external_id ?? (t.source === "api" ? t.note : null),
-    })),
+    whish: (parsed.whish ?? []).map((t) => {
+      const fromNote =
+        typeof t.note === "string"
+          ? t.note.match(/Whish(?: collect)? (\d+)/)?.[1] ?? null
+          : null;
+      return {
+        ...t,
+        kind: t.kind === "commission" ? "commission" : "subscription",
+        external_id: t.external_id ?? fromNote,
+      };
+    }),
   };
   return ensureOrderNumbers(ensureAdminDriver(next));
 }
@@ -979,10 +985,14 @@ export function claimOrder(
     return { state, error: "Your account is frozen by an admin" };
   }
   if (!isAdminActor && !payOpen && !percentageMode && driver.subscription_status === "frozen") {
-    return { state, error: "Your account is frozen. Pay subscription + $10 to reactivate." };
+    const penalty = state.settings.freeze_penalty_usd;
+    return {
+      state,
+      error: `Your account is frozen. Pay subscription + $${penalty} to reactivate.`,
+    };
   }
   if (!isAdminActor && !payOpen && !percentageMode && driver.subscription_status === "pending_payment") {
-    return { state, error: "Pay your subscription first (Whish 81848663)" };
+    return { state, error: "Pay your subscription first" };
   }
 
   const activeCount = state.orders.filter(
@@ -1308,6 +1318,39 @@ export type RequestPayOpts = {
   amount?: number;
 };
 
+export function driverPayDueUsd(
+  state: DemoState,
+  driver: Driver,
+): { kind: WhishKind; amount: number } {
+  if (driverCompanyPayMode(driver, state.settings) === "percentage") {
+    return {
+      kind: "commission",
+      amount: driverCommissionTotals(state, driver.id).dueNow,
+    };
+  }
+  const frozen = driver.subscription_status === "frozen";
+  return {
+    kind: "subscription",
+    amount:
+      state.settings.subscription_price_usd +
+      (frozen ? state.settings.freeze_penalty_usd : 0),
+  };
+}
+
+export function pendingApiWhishTx(
+  state: DemoState,
+  driverId: string,
+  kind: WhishKind,
+): WhishTx | undefined {
+  return state.whish.find(
+    (t) =>
+      t.driver_id === driverId &&
+      t.source === "api" &&
+      t.status === "pending" &&
+      t.kind === kind,
+  );
+}
+
 export function requestSubscriptionPayment(
   state: DemoState,
   driverId: string,
@@ -1329,19 +1372,41 @@ export function requestSubscriptionPayment(
         (frozen ? state.settings.freeze_penalty_usd : 0));
   if (kind === "commission" && amount <= 0) return state;
   const profile = state.profiles.find((p) => p.id === driverId);
+  const source = opts?.source ?? "manual";
+  const note = opts?.externalId
+    ? `Whish collect ${opts.externalId}`
+    : kind === "commission"
+      ? `Direct commission — ${profile?.full_name ?? "driver"}`
+      : `Whish Pay ${state.settings.whish_number}`;
+
+  if (source === "api") {
+    const existing = pendingApiWhishTx(state, driverId, kind);
+    if (existing) {
+      return {
+        ...state,
+        whish: state.whish.map((t) =>
+          t.id === existing.id
+            ? {
+                ...t,
+                amount_usd: amount,
+                note,
+                external_id: opts?.externalId ?? t.external_id,
+              }
+            : t,
+        ),
+      };
+    }
+  }
+
   const tx: WhishTx = {
     id: uid(),
     driver_id: driverId,
     amount_usd: amount,
     phone_ref: profile?.phone ?? "",
-    source: opts?.source ?? "manual",
+    source,
     status: "pending",
     kind,
-    note: opts?.externalId
-      ? `Whish ${opts.externalId}`
-      : kind === "commission"
-        ? `Direct commission — ${profile?.full_name ?? "driver"}`
-        : `Pay Whish ${state.settings.whish_number}`,
+    note,
     external_id: opts?.externalId ?? null,
     created_at: new Date().toISOString(),
     confirmed_at: null,
@@ -1353,10 +1418,12 @@ export function confirmWhish(
   state: DemoState,
   txId: string,
 ): DemoState {
-  const tx = state.whish.find((t) => t.id === txId);
-  if (!tx) return state;
+  const tx = state.whish.find(
+    (t) => t.id === txId || (t.external_id != null && t.external_id === txId),
+  );
+  if (!tx || tx.status === "confirmed") return state;
   const whish = state.whish.map((t) =>
-    t.id === txId
+    t.id === tx.id
       ? { ...t, status: "confirmed" as const, confirmed_at: new Date().toISOString() }
       : t,
   );
