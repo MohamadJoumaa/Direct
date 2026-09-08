@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Navigation } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -21,16 +21,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuth } from "@/lib/auth-context";
 import { formatOrderNumber, profilePhotoUrl, publicClientInfo } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 import { nextNavStop, openDrivingDirections } from "@/lib/maps-nav";
 
 export default function DriverOrderPage() {
   const params = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { state, advanceOrder, confirmDelivery, reportClient, addCheckin } = useStore();
+  const { state, advanceOrder, confirmDelivery, reportClient, addCheckin, markNotificationRead } =
+    useStore();
   const { dict } = useI18n();
   const [reason, setReason] = useState("");
   const [checkStatus, setCheckStatus] = useState<"on_time" | "late" | "missed">("on_time");
@@ -41,6 +43,20 @@ export default function DriverOrderPage() {
     !!user &&
     !!order &&
     (order.assigned_driver_id === user.id || order.long_distance_driver_id === user.id);
+
+  useEffect(() => {
+    if (!user || !order || order.status !== "cancelled") return;
+    for (const n of state.notifications) {
+      if (
+        n.user_id === user.id &&
+        n.kind === "order_cancelled" &&
+        n.order_id === order.id &&
+        !n.read
+      ) {
+        markNotificationRead(n.id);
+      }
+    }
+  }, [markNotificationRead, order, state.notifications, user]);
   if (!user || !order || !assigned) {
     return (
       <AppShell>
@@ -74,6 +90,19 @@ export default function DriverOrderPage() {
           <ArrowLeft className="size-4 rtl:rotate-180" />
           {isHistory ? dict.driver.pastJobs : dict.driver.backToJobs}
         </Link>
+
+        {isHistory ? (
+          order.status === "cancelled" ? (
+            <Alert variant="destructive" className="border-2">
+              <AlertTitle className="text-xl">{dict.driver.orderCancelledTitle}</AlertTitle>
+              <AlertDescription className="text-lg">
+                {fmt(dict.driver.orderCancelledBody, {
+                  number: formatOrderNumber(order.order_number),
+                })}
+              </AlertDescription>
+            </Alert>
+          ) : null
+        ) : null}
 
         <OrderReceipt
           order={order}

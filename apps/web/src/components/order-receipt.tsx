@@ -5,11 +5,24 @@ import { Clock, MapPin, Package } from "lucide-react";
 import type { Order, Warehouse } from "@/lib/demo-store";
 import { formatOrderNumber } from "@/lib/demo-store";
 import { Badge } from "@/components/ui/badge";
-import { orderTypeLabel, useI18n } from "@/lib/i18n";
+import { orderStatusLabel, orderTypeLabel, useI18n } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
 import { cn } from "@/lib/utils";
 
 type ExtraLine = { label: string; value: string };
+
+export type OrderReceiptData = Pick<
+  Order,
+  | "product_description"
+  | "pickup_address"
+  | "pickup_lat"
+  | "pickup_lng"
+  | "dropoff_address"
+  | "dropoff_lat"
+  | "dropoff_lng"
+  | "order_type"
+> &
+  Partial<Pick<Order, "order_number" | "created_at" | "status" | "eta_minutes">>;
 
 export function OrderReceipt({
   order,
@@ -20,7 +33,7 @@ export function OrderReceipt({
   people,
   actions,
 }: {
-  order: Order;
+  order: OrderReceiptData;
   warehouse?: Warehouse | null;
   cashLabel: string;
   cashValue: string;
@@ -29,30 +42,42 @@ export function OrderReceipt({
   actions?: ReactNode;
 }) {
   const { dict, lang } = useI18n();
-  const placed = new Date(order.created_at).toLocaleString(lang === "ar" ? "ar-LB" : "en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  const isDraft = order.order_number == null;
+  const placed =
+    order.created_at != null
+      ? new Date(order.created_at).toLocaleString(lang === "ar" ? "ar-LB" : "en-GB", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : null;
 
   return (
     <article className="overflow-hidden rounded-2xl border-2 bg-card">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-dashed bg-muted px-5 py-4">
         <div className="flex min-w-0 flex-col gap-1">
           <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-            {dict.common.receipt}
+            {isDraft ? dict.order.confirmTitle : dict.common.receipt}
           </p>
-          <p className="font-mono text-3xl font-bold tracking-tight tabular-nums">
-            {formatOrderNumber(order.order_number)}
-          </p>
+          {isDraft ? (
+            <p className="text-3xl font-bold tracking-tight">{dict.order.confirmReview}</p>
+          ) : (
+            <p className="font-mono text-3xl font-bold tracking-tight tabular-nums">
+              {formatOrderNumber(order.order_number!)}
+            </p>
+          )}
           <p className="text-sm text-muted-foreground">
-            {dict.common.placed} · {placed}
+            {isDraft || !placed ? dict.order.confirmHint : `${dict.common.placed} · ${placed}`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge>{orderTypeLabel(order.order_type, dict)}</Badge>
-          <Badge variant="outline" className="capitalize">
-            {order.status.replaceAll("_", " ")}
-          </Badge>
+          {order.status ? (
+            <Badge variant="outline" className="capitalize">
+              {orderStatusLabel(order.status, dict)}
+            </Badge>
+          ) : (
+            <Badge variant="outline">{dict.order.confirmReady}</Badge>
+          )}
         </div>
       </header>
 

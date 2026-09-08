@@ -3,8 +3,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { toast } from "sonner";
 import {
   Bell,
+  CircleAlert,
   LayoutDashboard,
   LogOut,
   MapPin,
@@ -22,6 +25,7 @@ import {
 import { ProfilePhoto } from "@/components/profile-photo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -34,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth-context";
 import { profilePhotoUrl } from "@/lib/demo-store";
+import { notificationCopy } from "@/lib/notification-copy";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
 import type { UserRole } from "@direct/shared";
@@ -46,9 +51,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+const toastedCancelIds = new Set<string>();
+
 function NotificationBell() {
   const { user } = useAuth();
   const { dict } = useI18n();
+  const router = useRouter();
   const { state, markNotificationRead } = useStore();
   if (!user) return null;
   const notifs = state.notifications.filter((n) => n.user_id === user.id);
@@ -62,7 +70,7 @@ function NotificationBell() {
             variant="ghost"
             size="icon"
             className="relative touch-target"
-            aria-label="Notifications"
+            aria-label={dict.common.notifications}
           />
         }
       >
@@ -78,25 +86,94 @@ function NotificationBell() {
           <p className="text-sm font-semibold">{dict.common.notifications}</p>
         </div>
         <div className="max-h-64 overflow-y-auto">
-          {notifs.map((n) => (
-            <button
-              key={n.id}
-              type="button"
-              className={cn(
-                "flex w-full flex-col gap-0.5 border-b px-4 py-3 text-start transition-colors hover:bg-muted/50",
-                !n.read && "bg-primary/5",
-              )}
-              onClick={() => {
-                if (!n.read) markNotificationRead(n.id);
-              }}
-            >
-              <p className="text-sm font-medium">{n.title}</p>
-              <p className="text-xs text-muted-foreground">{n.body}</p>
-            </button>
-          ))}
+          {notifs.map((n) => {
+            const copy = notificationCopy(n, dict, state.orders);
+            return (
+              <button
+                key={n.id}
+                type="button"
+                className={cn(
+                  "flex min-h-11 w-full flex-col gap-0.5 border-b px-4 py-3 text-start transition-colors hover:bg-muted/50",
+                  !n.read && "bg-primary/5",
+                )}
+                onClick={() => {
+                  if (!n.read) markNotificationRead(n.id);
+                  if (copy.href) router.push(copy.href);
+                }}
+              >
+                <p className="text-sm font-medium">{copy.title}</p>
+                <p className="text-xs text-muted-foreground">{copy.body}</p>
+              </button>
+            );
+          })}
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function DriverCancelAlerts() {
+  const { user, effectiveRole } = useAuth();
+  const { dict } = useI18n();
+  const { state, markNotificationRead } = useStore();
+  const userId = user?.id;
+
+  const cancels =
+    userId && effectiveRole === "driver"
+      ? state.notifications.filter(
+          (n) => n.user_id === userId && n.kind === "order_cancelled" && !n.read,
+        )
+      : [];
+
+  useEffect(() => {
+    if (!userId || effectiveRole !== "driver") return;
+    const unread = state.notifications.filter(
+      (n) => n.user_id === userId && n.kind === "order_cancelled" && !n.read,
+    );
+    for (const n of unread) {
+      if (toastedCancelIds.has(n.id)) continue;
+      toastedCancelIds.add(n.id);
+      const copy = notificationCopy(n, dict, state.orders);
+      toast.warning(copy.title, { description: copy.body, duration: 5000 });
+    }
+  }, [dict, effectiveRole, state.notifications, state.orders, userId]);
+
+  if (cancels.length === 0) return null;
+
+  return (
+    <div className="mb-6 flex flex-col gap-3">
+      {cancels.map((n) => {
+        const copy = notificationCopy(n, dict, state.orders);
+        return (
+          <Alert key={n.id} variant="destructive" className="border-2">
+            <CircleAlert />
+            <AlertTitle className="text-xl">{copy.title}</AlertTitle>
+            <AlertDescription className="flex flex-col gap-3 text-lg">
+              <p>{copy.body}</p>
+              <div className="flex flex-wrap gap-2">
+                {copy.href ? (
+                  <Link
+                    href={copy.href}
+                    className="touch-target inline-flex min-h-11 items-center rounded-full bg-destructive px-4 text-base font-semibold text-destructive-foreground"
+                  >
+                    {dict.driver.viewCancelledOrder}
+                  </Link>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="touch-target"
+                  onClick={() => markNotificationRead(n.id)}
+                >
+                  {dict.driver.dismiss}
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        );
+      })}
+    </div>
   );
 }
 
@@ -281,7 +358,10 @@ export function AppShell({
           })}
         </nav>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
+        <DriverCancelAlerts />
+        {children}
+      </main>
     </div>
   );
 }

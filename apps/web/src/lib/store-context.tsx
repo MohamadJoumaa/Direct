@@ -131,6 +131,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     demo.saveState(loaded);
     setState(loaded);
     setReady(true);
+
+    function onStorage(e: StorageEvent) {
+      if (e.key !== demo.STORAGE_KEY || !e.newValue) return;
+      setState(demo.loadState());
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const commit = useCallback((next: demo.DemoState) => {
@@ -206,8 +213,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         commit({ ...state, settings: { ...state.settings, ...partial } }),
       addDocument: (driverId, doc_type, file_name, file_data) =>
         commit(demo.addDocument(state, driverId, doc_type, file_name, file_data)),
-      markNotificationRead: (notifId) =>
-        commit(demo.markNotificationRead(state, notifId)),
+      markNotificationRead: (notifId) => {
+        setState((prev) => {
+          const next = demo.markNotificationRead(prev, notifId);
+          demo.saveState(next);
+          return next;
+        });
+      },
       approveDocument: (docId, approve) =>
         commit(demo.approveDocument(state, docId, approve)),
       addCheckin: (orderId, driverId, status, note) =>

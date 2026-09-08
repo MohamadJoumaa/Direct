@@ -18,7 +18,7 @@ import {
   profilePhotoUrl,
 } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
-import { useI18n } from "@/lib/i18n";
+import { orderStatusLabel, useI18n } from "@/lib/i18n";
 import { payMethodLabel, ReviewStatusBadge } from "../account-status";
 import { DriverAccountActions } from "../driver-account-actions";
 
@@ -148,7 +148,7 @@ export default function AdminDriverProfilePage() {
             <p className="text-base text-muted-foreground">{dict.admin.restrictionHint}</p>
             <p className="text-base text-muted-foreground">{dict.admin.unpaidAccessHint}</p>
             {!isSelf ? (
-              <div className="mt-2">
+              <div className="mt-2 w-full">
                 <DriverAccountActions
                   driver={driver}
                   dict={dict}
@@ -213,7 +213,7 @@ export default function AdminDriverProfilePage() {
                     {formatOrderNumber(o.order_number)} · {o.product_description}
                   </span>
                   <span className="text-muted-foreground">
-                    {formatDeliveryCash(o.delivery_fee_usd, o.delivery_fee_lbp)} · {o.status}
+                    {formatDeliveryCash(o.delivery_fee_usd, o.delivery_fee_lbp)} · {orderStatusLabel(o.status, dict)}
                   </span>
                 </Link>
               ))

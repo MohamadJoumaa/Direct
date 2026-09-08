@@ -20,6 +20,7 @@ import {
   reverseGeocode,
   useMapsAvailable,
 } from "@/components/delivery-map";
+import { OrderReceipt } from "@/components/order-receipt";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -421,34 +422,43 @@ function NewOrderContent() {
           ) : null}
 
           {step === 4 ? (
-            <Card className="border-2">
-              <CardHeader>
-                <CardTitle className="text-2xl">{dict.order.confirmTitle}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4 text-lg">
-                <p>
-                  <strong>{dict.common.from}:</strong>{" "}
-                  {locationLabel(pickup.address, pickup.lat, pickup.lng)}
-                </p>
-                <p>
-                  <strong>{dict.common.to}:</strong>{" "}
-                  {locationLabel(dropoff.address, dropoff.lat, dropoff.lng)}
-                </p>
-                <p>
-                  <strong>{dict.common.item}:</strong> {product}
-                </p>
-                <p>
-                  <strong>{dict.common.type}:</strong> {selectedType.label}
-                </p>
-                <p>
-                  <strong>{dict.common.cash}:</strong>{" "}
-                  {formatDeliveryCash(quote.totalUsd, quote.totalLbp)}
-                </p>
-                <p>
-                  <strong>{dict.order.distance}:</strong> {distanceKm.toFixed(1)}{" "}
-                  {dict.common.km}
-                </p>
-                <div className="flex gap-2">
+            <OrderReceipt
+              order={{
+                product_description: product,
+                pickup_address: pickup.address,
+                pickup_lat: pickup.lat,
+                pickup_lng: pickup.lng,
+                dropoff_address: dropoff.address,
+                dropoff_lat: dropoff.lat,
+                dropoff_lng: dropoff.lng,
+                order_type: orderType,
+              }}
+              cashLabel={dict.common.cash}
+              cashValue={formatDeliveryCash(quote.totalUsd, quote.totalLbp)}
+              extraCashLines={[
+                {
+                  label: dict.order.distance,
+                  value: `${distanceKm.toFixed(1)} ${dict.common.km}`,
+                },
+              ]}
+              people={
+                <div className="flex flex-col gap-2 text-base text-muted-foreground">
+                  <p>{dict.order.cashNote}</p>
+                  {quote.nightUsd > 0 ? (
+                    <p>{fmt(dict.order.nightNote, { amount: quote.nightUsd.toFixed(2) })}</p>
+                  ) : null}
+                  {costCaps ? (
+                    <p>
+                      {fmt(dict.order.priceRange, {
+                        min: formatDeliveryCash(costCaps.order_min_usd, costCaps.order_min_lbp),
+                        max: formatDeliveryCash(costCaps.order_max_usd, costCaps.order_max_lbp),
+                      })}
+                    </p>
+                  ) : null}
+                </div>
+              }
+              actions={
+                <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
                     size="lg"
@@ -465,8 +475,8 @@ function NewOrderContent() {
                     {dict.order.placeOrder}
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
+              }
+            />
           ) : null}
 
           <DeliveryMap

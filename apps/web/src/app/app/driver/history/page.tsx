@@ -15,7 +15,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { formatOrderNumber, publicClientInfo } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
-import { orderTypeLabel, useI18n } from "@/lib/i18n";
+import { orderStatusLabel, orderTypeLabel, useI18n } from "@/lib/i18n";
 import { OrderSearchField, useOrderSearch } from "@/components/order-search";
 import { orderPartyExtras } from "@/lib/order-search";
 
@@ -90,7 +90,7 @@ export default function DriverHistoryPage() {
                       <TableCell className="text-base">
                         ${o.driver_cut_usd.toFixed(2)}
                       </TableCell>
-                      <TableCell className="text-base capitalize">{o.status}</TableCell>
+                      <TableCell className="text-base capitalize">{orderStatusLabel(o.status, dict)}</TableCell>
                       <TableCell>
                         <LinkButton
                           href={`/app/driver/orders/${o.id}`}

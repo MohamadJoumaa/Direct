@@ -16,7 +16,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { formatOrderNumber } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
-import { orderTypeLabel, useI18n } from "@/lib/i18n";
+import { orderStatusLabel, orderTypeLabel, useI18n } from "@/lib/i18n";
 import { OrderSearchField, useOrderSearch } from "@/components/order-search";
 import { orderPartyExtras } from "@/lib/order-search";
 
@@ -75,7 +75,7 @@ export default function ClientHistoryPage() {
                     <TableCell className="text-base">
                       {formatDeliveryCash(o.delivery_fee_usd, o.delivery_fee_lbp)}
                     </TableCell>
-                    <TableCell className="text-base capitalize">{o.status}</TableCell>
+                    <TableCell className="text-base capitalize">{orderStatusLabel(o.status, dict)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

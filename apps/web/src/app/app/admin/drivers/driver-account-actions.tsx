@@ -35,13 +35,20 @@ export function DriverAccountActions({
     else toast.success(next ? dict.admin.paymentWaivedToast : dict.admin.paymentRequiredToast);
   }
 
+  const btnClass =
+    "touch-target h-full min-h-11 w-full whitespace-normal rounded-full px-3 py-2 text-center leading-tight";
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div
+      role="group"
+      aria-label={dict.admin.accountStatus}
+      className="grid w-full min-w-[22rem] grid-cols-3 items-stretch gap-2"
+    >
       {showUnfreeze ? (
         <Button
           size={size}
           variant="outline"
-          className="touch-target rounded-full"
+          className={btnClass}
           onClick={() => run("unfreeze", dict.admin.driverUnfrozenToast)}
         >
           {dict.admin.unfreezeDriver}
@@ -50,7 +57,7 @@ export function DriverAccountActions({
         <Button
           size={size}
           variant="outline"
-          className="touch-target rounded-full"
+          className={btnClass}
           disabled={driver.banned}
           onClick={() => run("freeze", dict.admin.driverFrozenToast, dict.admin.confirmFreeze)}
         >
@@ -61,7 +68,7 @@ export function DriverAccountActions({
         <Button
           size={size}
           variant="outline"
-          className="touch-target rounded-full"
+          className={btnClass}
           onClick={() => run("unban", dict.admin.driverUnbannedToast)}
         >
           {dict.admin.unbanDriver}
@@ -70,7 +77,7 @@ export function DriverAccountActions({
         <Button
           size={size}
           variant="destructive"
-          className="touch-target rounded-full"
+          className={btnClass}
           onClick={() => run("ban", dict.admin.driverBannedToast, dict.admin.confirmBan)}
         >
           {dict.admin.banDriver}
@@ -79,7 +86,7 @@ export function DriverAccountActions({
       <Button
         size={size}
         variant={driver.payment_waived ? "secondary" : "outline"}
-        className="touch-target rounded-full"
+        className={btnClass}
         onClick={toggleWaiver}
       >
         {driver.payment_waived ? dict.admin.revokeUnpaidAccess : dict.admin.allowUnpaidAccess}

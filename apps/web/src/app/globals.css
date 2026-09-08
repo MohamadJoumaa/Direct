@@ -95,6 +95,17 @@
   --sidebar-ring: #0a0a0a;
 }
 
+/* Unlayered so it wins over :root. Uber Move Arabic stand-in + Latin fallback. */
+html[lang="ar"] {
+  --font-app: var(--font-arabic), var(--font-sans-latin), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-app);
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  letter-spacing: 0;
+  word-spacing: 0.02em;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+}
+
 .dark {
   --background: #0a0a0a;
   --foreground: #f5f5f5;
@@ -137,25 +148,6 @@
   * {
     @apply border-border outline-ring/50;
   }
-  html[lang="ar"] {
-    --font-app: var(--font-arabic), var(--font-sans-latin), ui-sans-serif, system-ui, sans-serif;
-    font-feature-settings: "locl" 1, "kern" 1;
-  }
-  html[lang="ar"] body {
-    line-height: 1.7;
-  }
-  /* Uber Move AR is geometric with no Latin-style tracking. */
-  html[lang="ar"] .tracking-tight,
-  html[lang="ar"] .tracking-tighter,
-  html[lang="ar"] .heading-easy {
-    letter-spacing: 0;
-  }
-  html[lang="ar"] h1,
-  html[lang="ar"] h2,
-  html[lang="ar"] h3 {
-    line-height: 1.35;
-    letter-spacing: 0;
-  }
   body {
     @apply bg-background text-foreground;
   }
@@ -187,5 +179,27 @@
   /* Soft brand glow — lockups on dark bands only. */
   .logo-glow {
     filter: drop-shadow(0 0 28px color-mix(in oklab, var(--brand) 52%, transparent));
+  }
+  /* Same layer as Tailwind tracking/weight utilities so Arabic metrics win.
+     Uber Base: body 16/24 (1.5), headings ~1.25, no Latin tracking. */
+  html[lang="ar"] body {
+    line-height: 1.5;
+  }
+  html[lang="ar"] :is(.tracking-tight, .tracking-tighter, .tracking-wide, .tracking-wider, .tracking-widest, .heading-easy),
+  html[lang="ar"] [class*="tracking-"] {
+    letter-spacing: 0;
+  }
+  html[lang="ar"] .uppercase {
+    text-transform: none;
+  }
+  html[lang="ar"] :is(h1, h2, h3, .heading-easy, .leading-tight) {
+    line-height: 1.25;
+    letter-spacing: 0;
+  }
+  html[lang="ar"] :is(.leading-relaxed, .leading-loose, .text-easy) {
+    line-height: 1.5;
+  }
+  html[lang="ar"] :is(.font-extrabold, .font-black) {
+    font-weight: 700;
   }
 }

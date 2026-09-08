@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import type { OrderType } from "@direct/shared";
+import type { OrderStatus, OrderType } from "@direct/shared";
 import { en, type Dictionary } from "./en";
 import { ar } from "./ar";
 
@@ -37,6 +37,10 @@ function lookup(dict: Dictionary, path: string): string | undefined {
     }
   }
   return typeof cur === "string" ? cur : undefined;
+}
+
+export function orderStatusLabel(status: OrderStatus | string, dict: Dictionary): string {
+  return dict.orderStatus[status as OrderStatus] ?? status.replaceAll("_", " ");
 }
 
 export function orderTypeLabel(type: OrderType, dict: Dictionary): string {

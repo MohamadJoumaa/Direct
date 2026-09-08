@@ -283,13 +283,13 @@ export default function AdminDriversPage() {
                           <TableCell>
                             {d.rating_avg.toFixed(1)} ({d.rating_count})
                           </TableCell>
-                          <TableCell className="text-end">
-                            <div className="flex flex-wrap justify-end gap-2">
+                          <TableCell className="min-w-[22rem] text-end">
+                            <div className="flex min-w-[22rem] flex-col items-stretch gap-2">
                               <LinkButton
                                 href={`/app/admin/drivers/${d.id}`}
                                 size="sm"
                                 variant="outline"
-                                className="touch-target rounded-full"
+                                className="touch-target h-11 w-full rounded-full"
                               >
                                 {dict.admin.openProfile}
                               </LinkButton>

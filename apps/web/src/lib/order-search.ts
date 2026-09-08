@@ -34,6 +34,7 @@ export function filterOrdersByQuery<T extends Order>(
       order.pickup_address,
       order.dropoff_address,
       order.status.replaceAll("_", " "),
+      order.status === "completed" ? "delivered تم التسليم" : "",
       order.order_type,
       order.order_type.replaceAll("_", " "),
       ...(extra?.(order) ?? []),

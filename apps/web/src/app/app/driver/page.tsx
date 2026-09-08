@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
-import { orderTypeLabel, useI18n, fmt } from "@/lib/i18n";
+import { orderStatusLabel, orderTypeLabel, useI18n, fmt } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
 import { nextNavStop, openDrivingDirections } from "@/lib/maps-nav";
 import { OrderSearchField, useOrderSearch } from "@/components/order-search";
@@ -244,7 +244,7 @@ export default function DriverHomePage() {
                   <Badge>{orderTypeLabel(o.order_type, dict)}</Badge>
                 </CardHeader>
                 <CardContent className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-lg capitalize">{o.status.replaceAll("_", " ")} · ${o.driver_cut_usd.toFixed(2)}</p>
+                  <p className="text-lg capitalize">{orderStatusLabel(o.status, dict)} · ${o.driver_cut_usd.toFixed(2)}</p>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"

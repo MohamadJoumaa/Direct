@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
-import { useI18n } from "@/lib/i18n";
+import { orderStatusLabel, useI18n } from "@/lib/i18n";
 import type { Order } from "@/lib/demo-store";
 import { formatOrderNumber } from "@/lib/demo-store";
 import { OrderSearchField, useOrderSearch } from "@/components/order-search";
@@ -212,7 +212,7 @@ function OrdersTable({
                     <br />
                     <span className="text-muted-foreground">{driver?.phone}</span>
                   </TableCell>
-                  <TableCell className="capitalize">{o.status.replaceAll("_", " ")}</TableCell>
+                  <TableCell className="capitalize">{orderStatusLabel(o.status, dict)}</TableCell>
                   <TableCell>
                     {formatDeliveryCash(o.delivery_fee_usd, o.delivery_fee_lbp)}
                   </TableCell>
