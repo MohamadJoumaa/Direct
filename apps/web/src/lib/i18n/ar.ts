@@ -356,7 +356,7 @@ export const ar: Dictionary = {
     companyPayTitle: "الدفع لدايركت",
     companyPayHint: "اختر كيف تدفع للشركة: اشتراك شهري، أو نسبة من كل توصيل.",
     payPlanSubscription: "اشتراك شهري",
-    payPlanSubscriptionDesc: "${price} في الشهر",
+    payPlanSubscriptionDesc: "{price} في الشهر",
     payPlanPercentage: "نسبة من كل طلب",
     payPlanPercentageDesc: "{pct}% من كل توصيل تذهب إلى دايركت",
     payPlanSaved: "تم تحديث خطة الدفع",

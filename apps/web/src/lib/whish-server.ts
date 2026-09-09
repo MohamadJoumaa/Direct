@@ -52,22 +52,48 @@ export function originFromRequest(req: Request): string {
   return `${proto}://${host}`;
 }
 
+/** Public site origin from `WHISH_WEBSITE_URL`, or null if unset/invalid. */
+export function configuredWebsiteOrigin(): string | null {
+  const raw = process.env.WHISH_WEBSITE_URL;
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Base origin for Whish redirects. When `WHISH_WEBSITE_URL` is set, use it and
+ * ignore request Host / X-Forwarded-* so a forged header cannot bounce the
+ * driver to another site. Local demo without that env still uses the request.
+ */
+export function redirectBaseOrigin(req: Request): string {
+  return configuredWebsiteOrigin() ?? originFromRequest(req);
+}
+
 /** Redirects must stay on this app (or the configured public site). */
 export function resolveAppOrigin(req: Request, clientOrigin?: string): string {
+  const configured = configuredWebsiteOrigin();
+  if (configured) {
+    if (clientOrigin) {
+      try {
+        if (new URL(clientOrigin).origin === configured) return configured;
+      } catch {
+        /* ignore invalid */
+      }
+    }
+    return configured;
+  }
   const requestOrigin = originFromRequest(req);
-  const envOrigin = process.env.WHISH_WEBSITE_URL;
-  const allowed = new Set(
-    [requestOrigin, envOrigin].filter((v): v is string => Boolean(v)),
-  );
   if (clientOrigin) {
     try {
-      const origin = new URL(clientOrigin).origin;
-      if (allowed.has(origin)) return origin;
+      if (new URL(clientOrigin).origin === requestOrigin) return requestOrigin;
     } catch {
       /* ignore invalid */
     }
   }
-  return envOrigin || requestOrigin;
+  return requestOrigin;
 }
 
 export function parseExternalId(value: unknown): number | null {

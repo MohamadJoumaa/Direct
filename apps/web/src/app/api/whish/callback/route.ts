@@ -3,8 +3,8 @@ import {
   dashboardReturnUrl,
   fetchCollectStatus,
   getWhishEnv,
-  originFromRequest,
   parseExternalId,
+  redirectBaseOrigin,
 } from "@/lib/whish-server";
 
 /**
@@ -33,7 +33,7 @@ async function handleCallback(req: Request) {
   }
 
   const externalId = parseExternalId(externalRaw);
-  const appOrigin = originFromRequest(req);
+  const appOrigin = redirectBaseOrigin(req);
   if (externalId == null) {
     return NextResponse.redirect(
       new URL("/app/driver/dashboard?whish=failed", appOrigin),

@@ -3,6 +3,7 @@ import {
   fetchCollectStatus,
   getWhishEnv,
   parseExternalId,
+  redirectBaseOrigin,
 } from "@/lib/whish-server";
 
 /** Checks a Whish collect request. Returns { paid: boolean }. */
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const dest = new URL("/api/whish/callback", url.origin);
+  const dest = new URL("/api/whish/callback", redirectBaseOrigin(req));
   url.searchParams.forEach((value, key) => dest.searchParams.set(key, value));
   return NextResponse.redirect(dest, 303);
 }
