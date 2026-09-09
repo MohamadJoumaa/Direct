@@ -269,6 +269,12 @@ export function AppShell({
                     else router.push("/app/client");
                   }
                 }}
+                items={[
+                  { label: dict.admin.viewAsAdmin, value: "admin" },
+                  { label: dict.admin.viewAsClient, value: "client" },
+                  { label: dict.admin.viewAsBusiness, value: "business" },
+                  { label: dict.admin.viewAsDriver, value: "driver" },
+                ]}
               >
                 <SelectTrigger className="touch-target min-w-40 text-base">
                   <SelectValue />
