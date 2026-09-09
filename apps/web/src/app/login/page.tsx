@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label";
 import { useStore } from "@/lib/store-context";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n";
-import { Skeleton } from "@/components/ui/skeleton";
 
 function LoginFallback() {
   const { dict } = useI18n();
@@ -32,9 +31,9 @@ function LoginFallback() {
       <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 pb-24">
         <h1 className="text-3xl font-extrabold tracking-tight">{dict.auth.welcomeBack}</h1>
         <div className="mt-8 flex flex-col gap-5">
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
+          <div className="h-12 w-full rounded-xl bg-muted" />
+          <div className="h-12 w-full rounded-xl bg-muted" />
+          <div className="h-12 w-full rounded-xl bg-muted" />
         </div>
       </main>
     </div>

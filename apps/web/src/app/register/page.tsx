@@ -13,7 +13,6 @@ import { mapsConfigured } from "@/components/maps-config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -28,7 +27,7 @@ import { cn } from "@/lib/utils";
 
 const BusinessShopLocation = dynamic(
   () => import("./business-shop-location").then((mod) => mod.BusinessShopLocation),
-  { ssr: false, loading: () => <Skeleton className="h-80 w-full rounded-xl" /> },
+  { ssr: false, loading: () => <div className="h-80 w-full rounded-xl bg-muted" /> },
 );
 
 const inputClass =
@@ -50,10 +49,10 @@ function AuthPageFallback({ title }: { title: string }) {
       <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 py-10">
         <h1 className="text-3xl font-extrabold tracking-tight">{title}</h1>
         <div className="mt-8 flex flex-col gap-4">
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
+          <div className="h-12 w-full rounded-xl bg-muted" />
+          <div className="h-12 w-full rounded-xl bg-muted" />
+          <div className="h-12 w-full rounded-xl bg-muted" />
+          <div className="h-12 w-full rounded-xl bg-muted" />
         </div>
       </main>
     </div>

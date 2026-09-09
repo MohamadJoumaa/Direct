@@ -31,7 +31,6 @@ import { useStore } from "@/lib/store-context";
 import { fmt, useI18n } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
 import { cn } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/skeleton";
 
 const PRESETS = [
   {
@@ -51,14 +50,12 @@ type Point = { address: string; lat: number; lng: number };
 function NewOrderFallback() {
   const { dict } = useI18n();
   return (
-    <AppShell title={dict.nav.newOrder}>
-      <div className="flex flex-col gap-6" aria-busy="true">
-        <h1 className="heading-easy">{dict.order.createTitle}</h1>
-        <Skeleton className="h-10 w-40" />
-        <Skeleton className="h-64 w-full rounded-xl" />
-        <Skeleton className="h-80 w-full rounded-xl" />
-      </div>
-    </AppShell>
+    <div className="flex flex-col gap-6" aria-busy="true">
+      <h1 className="heading-easy">{dict.order.createTitle}</h1>
+      <div className="h-10 w-40 rounded-xl bg-muted" />
+      <div className="h-64 w-full rounded-xl bg-muted" />
+      <div className="h-80 w-full rounded-xl bg-muted" />
+    </div>
   );
 }
 
