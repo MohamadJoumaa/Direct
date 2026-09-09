@@ -6,7 +6,6 @@ import {
   quoteDeliveryPrice,
   type RevenueMode,
 } from "@direct/shared";
-import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,9 +29,7 @@ export default function AdminSettingsPage() {
   const { state, updateSettings, reset } = useStore();
   if (!isAdmin) {
     return (
-      <AppShell>
         <p className="text-easy">Admin only.</p>
-      </AppShell>
     );
   }
 
@@ -45,7 +42,6 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <AppShell title="Settings">
       <div className="flex flex-col gap-6">
         <Card className="border-2">
           <CardHeader>
@@ -236,7 +232,6 @@ export default function AdminSettingsPage() {
           Reset demo data
         </Button>
       </div>
-    </AppShell>
   );
 }
 

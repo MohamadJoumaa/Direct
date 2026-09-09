@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ShieldCheck, UserPlus } from "lucide-react";
 import { DRIVER_TYPE_LABELS, PUBLIC_DRIVER_TYPES, type DriverType } from "@direct/shared";
-import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { ProfilePhoto } from "@/components/profile-photo";
 import { Badge } from "@/components/ui/badge";
@@ -71,9 +70,7 @@ export default function AdminDriversPage() {
 
   if (!isAdmin || !user) {
     return (
-      <AppShell>
         <p className="text-easy">{dict.common.adminOnly}</p>
-      </AppShell>
     );
   }
 
@@ -98,7 +95,6 @@ export default function AdminDriversPage() {
   }
 
   return (
-    <AppShell title={dict.nav.drivers}>
       <div className="flex flex-col gap-6">
         <Card className="border-2">
           <CardHeader>
@@ -330,6 +326,5 @@ export default function AdminDriversPage() {
           </Card>
         ) : null}
       </div>
-    </AppShell>
   );
 }

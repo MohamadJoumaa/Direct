@@ -1,6 +1,5 @@
 "use client";
 
-import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,14 +35,11 @@ export default function DriverHistoryPage() {
   );
   if (!user || !driver) {
     return (
-      <AppShell>
         <p className="text-easy">{dict.driver.profileRequired}</p>
-      </AppShell>
     );
   }
 
   return (
-    <AppShell title={dict.nav.history}>
       <Card className="border-2">
         <CardHeader className="flex flex-col gap-3">
           <CardTitle className="heading-easy">{dict.driver.pastJobs}</CardTitle>
@@ -109,6 +105,5 @@ export default function DriverHistoryPage() {
           )}
         </CardContent>
       </Card>
-    </AppShell>
   );
 }

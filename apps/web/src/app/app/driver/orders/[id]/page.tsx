@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Navigation } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
 import { DeliveryMap } from "@/components/delivery-map";
 import { LinkedContactCard } from "@/components/linked-contact";
 import { OrderReceipt } from "@/components/order-receipt";
@@ -59,9 +58,7 @@ export default function DriverOrderPage() {
   }, [markNotificationRead, order, state.notifications, user]);
   if (!user || !order || !assigned) {
     return (
-      <AppShell>
         <p className="text-easy">{dict.common.orderNotFound}</p>
-      </AppShell>
     );
   }
 
@@ -81,7 +78,6 @@ export default function DriverOrderPage() {
         : dict.driver.navigateDropoff;
 
   return (
-    <AppShell title={`${dict.common.orderNumber} ${formatOrderNumber(order.order_number)}`}>
       <div className="flex flex-col gap-6">
         <Link
           href={isHistory ? "/app/driver/history" : "/app/driver"}
@@ -408,6 +404,5 @@ export default function DriverOrderPage() {
           />
         )}
       </div>
-    </AppShell>
   );
 }

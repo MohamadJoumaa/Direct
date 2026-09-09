@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { Menu } from "lucide-react";
 import { driverCommissionTotals, driverCompanyPayMode, driverDailyProfit, driverPayDueUsd, driverRevenue, formatOrderNumber } from "@/lib/demo-store";
-import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { DriverWhishActions } from "@/components/driver-whish-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,7 +43,9 @@ export default function DriverDashboardPage() {
     [state, user, period],
   );
 
-  if (!user || !driver) return null;
+  if (!user || !driver) {
+    return <p className="text-easy">{dict.driver.profileRequired}</p>;
+  }
 
   const periods: { key: Period; label: string }[] = [
     { key: "today", label: dict.driver.today },
@@ -71,7 +72,6 @@ export default function DriverDashboardPage() {
   const payDue = driverPayDueUsd(state, driver);
 
   return (
-    <AppShell title={dict.nav.money}>
       <div className="flex flex-col gap-6">
         <h1 className="heading-easy">{dict.driver.yourEarnings}</h1>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -229,6 +229,5 @@ export default function DriverDashboardPage() {
           </CardContent>
         </Card>
       </div>
-    </AppShell>
   );
 }

@@ -2,7 +2,6 @@
 
 import { formatDeliveryCash } from "@direct/shared";
 import { publicDriverLabel, formatOrderNumber, publicDriverInfo } from "@/lib/demo-store";
-import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { DeliveryMap } from "@/components/delivery-map";
 import { Badge } from "@/components/ui/badge";
@@ -34,8 +33,6 @@ export default function ClientHomePage() {
     showSearch: showOngoingSearch,
     filtered: filteredOngoing,
   } = useOrderSearch(ongoing, (o) => orderPartyExtras(o, state.profiles));
-
-  if (!user) return null;
 
   const liveMarkers = ongoing.flatMap((o) => {
     const name = shortProduct(o.product_description);
@@ -98,7 +95,6 @@ export default function ClientHomePage() {
     : undefined;
 
   return (
-    <AppShell title={dict.nav.home}>
       <div className="flex flex-col gap-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="heading-easy">{dict.client.yourOrders}</h1>
@@ -178,6 +174,5 @@ export default function ClientHomePage() {
           />
         ) : null}
       </div>
-    </AppShell>
   );
 }

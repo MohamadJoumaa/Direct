@@ -4,8 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { formatDeliveryCash } from "@direct/shared";
-import { formatOrderNumber, publicDriverInfo, publicDriverLabel, profilePhotoUrl } from "@/lib/demo-store";
-import { AppShell } from "@/components/app-shell";
+import { publicDriverInfo, publicDriverLabel, profilePhotoUrl } from "@/lib/demo-store";
 import { DeliveryMap } from "@/components/delivery-map";
 import { LinkedContactCard } from "@/components/linked-contact";
 import { OrderReceipt } from "@/components/order-receipt";
@@ -27,9 +26,7 @@ export default function ClientOrderDetailPage() {
 
   if (!user || !order || order.client_id !== user.id) {
     return (
-      <AppShell>
         <p className="text-easy">Order not found.</p>
-      </AppShell>
     );
   }
 
@@ -57,7 +54,6 @@ export default function ClientOrderDetailPage() {
   }
 
   return (
-    <AppShell title={`${dict.common.orderNumber} ${formatOrderNumber(order.order_number)}`}>
       <div className="flex flex-col gap-6">
         <OrderReceipt
           order={order}
@@ -205,6 +201,5 @@ export default function ClientOrderDetailPage() {
           />
         )}
       </div>
-    </AppShell>
   );
 }

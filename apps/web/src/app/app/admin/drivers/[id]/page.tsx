@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Phone, ShieldCheck, Star } from "lucide-react";
 import { DRIVER_TYPE_LABELS, formatDeliveryCash } from "@direct/shared";
-import { AppShell } from "@/components/app-shell";
 import { DocumentAttachment } from "@/components/document-attachment";
 import { ProfilePhoto } from "@/components/profile-photo";
 import { Badge } from "@/components/ui/badge";
@@ -35,17 +34,13 @@ export default function AdminDriverProfilePage() {
 
   if (!isAdmin || !user) {
     return (
-      <AppShell>
         <p className="text-easy">{dict.common.adminOnly}</p>
-      </AppShell>
     );
   }
 
   if (!driver || !profile) {
     return (
-      <AppShell title={dict.admin.driverProfile}>
         <p className="text-easy">{dict.admin.noDriversMatch}</p>
-      </AppShell>
     );
   }
 
@@ -67,7 +62,6 @@ export default function AdminDriverProfilePage() {
   };
 
   return (
-    <AppShell title={dict.admin.driverProfile}>
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
         <Link
           href="/app/admin/drivers"
@@ -221,6 +215,5 @@ export default function AdminDriverProfilePage() {
           </CardContent>
         </Card>
       </div>
-    </AppShell>
   );
 }

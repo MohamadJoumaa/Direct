@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { formatDeliveryCash, ORDER_TYPE_LABELS } from "@direct/shared";
-import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,9 +37,7 @@ export default function AdminOrdersPage() {
 
   if (!user || !isAdmin) {
     return (
-      <AppShell>
         <p className="text-easy">{dict.common.adminOnly}</p>
-      </AppShell>
     );
   }
 
@@ -64,7 +61,6 @@ export default function AdminOrdersPage() {
   }
 
   return (
-    <AppShell title="Admin">
       <div className="flex flex-col gap-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="heading-easy">{dict.admin.allOrders}</h1>
@@ -151,7 +147,6 @@ export default function AdminOrdersPage() {
           actions={(o) => <div className="text-end">{detailsLink(o.id)}</div>}
         />
       </div>
-    </AppShell>
   );
 }
 

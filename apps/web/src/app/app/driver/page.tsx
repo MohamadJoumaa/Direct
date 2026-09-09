@@ -4,7 +4,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { DRIVER_TYPE_LABELS } from "@direct/shared";
 import { availableOrdersForDriver, driverCommissionTotals, driverCompanyPayMode, driverPayDueUsd, formatOrderNumber } from "@/lib/demo-store";
-import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { DriverWhishActions } from "@/components/driver-whish-actions";
 import { DeliveryMap } from "@/components/delivery-map";
@@ -68,9 +67,7 @@ export default function DriverHomePage() {
 
   if (!user || !driver) {
     return (
-      <AppShell>
         <p className="text-easy">{dict.driver.profileRequired}</p>
-      </AppShell>
     );
   }
 
@@ -107,7 +104,6 @@ export default function DriverHomePage() {
   }
 
   return (
-    <AppShell title={dict.nav.ordersTab}>
       <div className="flex flex-col gap-6">
         {!isAdmin && driver.banned ? (
           <Alert variant="destructive" className="border-2">
@@ -345,6 +341,5 @@ export default function DriverHomePage() {
             })}
         />
       </div>
-    </AppShell>
   );
 }
