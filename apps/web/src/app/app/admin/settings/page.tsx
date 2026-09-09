@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
-import { locationLabel } from "@/lib/place-name";
 
 const PREVIEW_KM = [1, 3, 15, 50, 150, 200] as const;
 const PREVIEW_AT = new Date("2026-09-01T12:00:00+03:00");
@@ -201,11 +200,6 @@ export default function AdminSettingsPage() {
                   onChange={(v) => num("multiplier_owner", v)}
                 />
                 <Field
-                  label="Medical (later) ×"
-                  value={s.multiplier_medical}
-                  onChange={(v) => num("multiplier_medical", v)}
-                />
-                <Field
                   label="Nearby radius km"
                   value={s.nearby_radius_km}
                   onChange={(v) => num("nearby_radius_km", v)}
@@ -227,19 +221,6 @@ export default function AdminSettingsPage() {
                 })}
               </ul>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-2">
-          <CardHeader>
-            <CardTitle className="text-xl">Warehouses</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2 text-lg">
-            {state.warehouses.map((w) => (
-              <p key={w.id}>
-                <strong>{w.name}</strong> — {locationLabel(w.address, w.lat, w.lng)}
-              </p>
-            ))}
           </CardContent>
         </Card>
 
