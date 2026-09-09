@@ -13,10 +13,37 @@ import { Label } from "@/components/ui/label";
 import { useStore } from "@/lib/store-context";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n";
+import { Skeleton } from "@/components/ui/skeleton";
+
+function LoginFallback() {
+  const { dict } = useI18n();
+  return (
+    <div className="flex min-h-screen flex-col bg-background" aria-busy="true">
+      <header className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4">
+        <Link href="/" className="flex items-center gap-2">
+          <Image src="/logo-icon.png" alt="Direct logo" width={45} height={35} className="h-9 w-auto" unoptimized />
+          <span className="text-xl font-extrabold tracking-tight">Direct</span>
+        </Link>
+        <div className="flex items-center gap-1.5">
+          <LanguageToggle />
+          <ThemeToggle />
+        </div>
+      </header>
+      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 pb-24">
+        <h1 className="text-3xl font-extrabold tracking-tight">{dict.auth.welcomeBack}</h1>
+        <div className="mt-8 flex flex-col gap-5">
+          <Skeleton className="h-12 w-full rounded-xl" />
+          <Skeleton className="h-12 w-full rounded-xl" />
+          <Skeleton className="h-12 w-full rounded-xl" />
+        </div>
+      </main>
+    </div>
+  );
+}
 
 export default function LoginPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<LoginFallback />}>
       <LoginForm />
     </Suspense>
   );
