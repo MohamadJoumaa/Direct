@@ -7,7 +7,6 @@ import * as demo from "@/lib/demo-store";
 type StoreContextValue = {
   ready: boolean;
   state: demo.DemoState;
-  refresh: () => void;
   reset: () => void;
   register: (input: {
     full_name: string;
@@ -149,7 +148,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     () => ({
       ready,
       state,
-      refresh: () => setState(demo.loadState()),
       reset: () => commit(demo.resetDemo()),
       register: (input) => {
         const r = demo.registerUser(state, input);
