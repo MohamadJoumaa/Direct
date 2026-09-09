@@ -5,6 +5,8 @@ import type { OrderStatus, OrderType } from "@direct/shared";
 import { en, type Dictionary } from "./en";
 import { ar } from "./ar";
 
+export type { Dictionary };
+
 export type Lang = "en" | "ar";
 
 const STORAGE_KEY = "direct-lang";
