@@ -53,15 +53,13 @@ export default function HomePage() {
   }
 
   const marketingNav = [
-    { id: "send", href: "/login?role=client", label: dict.nav.send },
-    { id: "drive", href: "/login?role=driver", label: dict.nav.drive },
-    { id: "private", href: "/login?role=client", label: dict.nav.track },
+    { id: "send", href: sendHref, label: dict.nav.send },
+    { id: "drive", href: "/register?role=driver", label: dict.nav.drive },
     { id: "about", href: "#about", label: dict.nav.about },
   ];
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Header */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
           <Link href="/" className="flex items-center gap-2">
@@ -126,7 +124,6 @@ export default function HomePage() {
         </nav>
       </header>
 
-      {/* Hero */}
       <section id="send" className="mx-auto w-full max-w-6xl px-4 pb-16 pt-12 sm:pt-20">
         <div className="grid items-center gap-12 lg:grid-cols-2">
           <div className="flex flex-col gap-8">
@@ -203,7 +200,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* About */}
       <section id="about" className="mx-auto w-full max-w-6xl px-4 pb-20">
         <div className="flex flex-col gap-5">
           <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
@@ -227,7 +223,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Suggestions */}
       <section className="mx-auto w-full max-w-6xl px-4 pb-20">
         <h2 className="text-2xl font-bold tracking-tight">{dict.home.suggestions}</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -248,7 +243,7 @@ export default function HomePage() {
               icon: CarFront,
               title: dict.home.becomeDriver,
               text: dict.home.becomeDriverBody,
-              href: "/register",
+              href: "/register?role=driver",
             },
           ].map((item) => (
             <Link
@@ -269,7 +264,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Drive section */}
       <section id="drive" className="border-y bg-background text-foreground">
         <div className="mx-auto grid w-full max-w-6xl items-center gap-10 px-4 py-20 lg:grid-cols-2">
           <div className="flex flex-col gap-5">
@@ -308,10 +302,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="bg-[#0a0a0a] text-white">
         <div className="mx-auto w-full max-w-6xl px-4 py-14">
-          <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-3">
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
                 <Image src="/logo-icon.png" alt="" width={36} height={28} className="h-7 w-auto" unoptimized />
@@ -329,11 +322,6 @@ export default function HomePage() {
                     {dict.home.footerAbout}
                   </a>
                 </li>
-                <li>
-                  <Link href="/register" className="hover:text-white">
-                    {dict.home.footerCareers}
-                  </Link>
-                </li>
               </ul>
             </div>
             <div>
@@ -347,30 +335,13 @@ export default function HomePage() {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/register" className="hover:text-white">
+                  <Link href="/register?role=driver" className="hover:text-white">
                     {dict.home.footerDrive}
                   </Link>
                 </li>
                 <li>
-                  <Link href="/register" className="hover:text-white">
+                  <Link href="/register?role=business" className="hover:text-white">
                     {dict.home.footerBusiness}
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-wider text-white/50">
-                {dict.home.footerSupport}
-              </p>
-              <ul className="mt-4 flex flex-col gap-3 text-sm text-white/80">
-                <li>
-                  <Link href="/login" className="hover:text-white">
-                    {dict.home.footerHelp}
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/login" className="hover:text-white">
-                    {dict.home.footerContact}
                   </Link>
                 </li>
               </ul>

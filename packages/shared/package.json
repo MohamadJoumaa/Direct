@@ -10,8 +10,5 @@
   },
   "scripts": {
     "test": "node --experimental-strip-types --test src/payment-rules.test.ts"
-  },
-  "dependencies": {
-    "zod": "^3.24.2"
   }
 }

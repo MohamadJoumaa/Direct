@@ -48,7 +48,7 @@ The login screen also lists a short subset of these **demo-only** accounts.
 
 - **Next.js 16** App Router, React 19, Tailwind CSS, shadcn/ui
 - **npm workspaces** monorepo: `apps/*` and `packages/*`
-- **`@direct/shared`**: roles, dual-currency fares (USD / LBP), Zod schemas, ETA helpers, [driver payment rules](packages/shared/src/payment-rules.md)
+- **`@direct/shared`**: roles, dual-currency fares (USD / LBP), ETA helpers, [driver payment rules](packages/shared/src/payment-rules.md)
 - **Supabase**: SQL migrations, row-level security, and RPCs such as `claim_order` under `supabase/migrations`
 - Optional **Google Maps** when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set
 - **Whish Pay** merchant collect when `WHISH_*` credentials are present

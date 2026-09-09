@@ -121,10 +121,6 @@ export function driverReviewStatus(driver: Driver, state?: DemoState): DriverRev
   return "paid";
 }
 
-export function driverCannotWork(state: DemoState, driver: Driver): boolean {
-  return driver.banned || driver.admin_frozen || driverPaymentBlocked(state, driver);
-}
-
 /** Latest Whish attempt for this driver (list is newest-first). */
 export function driverPayMethod(state: DemoState, driverId: string): DriverPayMethod {
   const latest = state.whish.find((t) => t.driver_id === driverId);
@@ -238,20 +234,6 @@ export type Notification = {
   order_id?: string;
 };
 
-/** Queued device push — sent when the driver app registers an Expo/FCM token. */
-export type PendingPush = {
-  id: string;
-  user_id: string;
-  title: string;
-  body: string;
-  data: {
-    type: NotificationKind;
-    order_id?: string;
-    order_number?: number;
-  };
-  created_at: string;
-};
-
 export type PrivateCheckin = {
   id: string;
   order_id: string;
@@ -291,7 +273,6 @@ export type DemoState = {
   warehouses: Warehouse[];
   products: WarehouseProduct[];
   notifications: Notification[];
-  pending_pushes: PendingPush[];
   /** Driver skipped an offer — order stays pending for everyone else. */
   declined_offers: { driver_id: string; order_id: string }[];
   settings: CompanySettings;
@@ -553,7 +534,6 @@ function seed(): DemoState {
     ],
     documents: [],
     notifications: [],
-    pending_pushes: [],
     declined_offers: [],
     checkins: [],
     products: [],
@@ -644,7 +624,6 @@ function migrateState(parsed: DemoState): DemoState {
     products: parsed.products ?? [],
     warehouses: parsed.warehouses ?? [],
     notifications: parsed.notifications ?? [],
-    pending_pushes: parsed.pending_pushes ?? [],
     declined_offers: parsed.declined_offers ?? [],
     profiles: (parsed.profiles ?? []).map((p) => {
       if (p.role !== "business") return p;
@@ -1155,14 +1134,6 @@ export function confirmDelivery(
 ): { state: DemoState; error?: string } {
   const order = state.orders.find((o) => o.id === orderId);
   if (!order) return { state, error: "Order not found" };
-  if (!["arrived", "awaiting_confirmation"].includes(order.status) && order.status !== "completed") {
-    if (order.status !== "in_transit" && order.status !== "picked_up") {
-      // allow confirm only after arrived
-    }
-  }
-  if (!["awaiting_confirmation", "arrived", "in_transit", "picked_up"].includes(order.status)) {
-    // For simplicity after "arrived" maps to awaiting_confirmation
-  }
 
   let next = { ...order };
   if (who === "client") {
@@ -1187,36 +1158,18 @@ export function confirmDelivery(
       status: "completed",
       completed_at: new Date().toISOString(),
     };
-    const driverId = next.long_distance_driver_id ?? next.assigned_driver_id;
+    const driverId = orderLinkedDriverId(next);
     if (driverId) {
       drivers = drivers.map((d) => {
         if (d.id !== driverId && d.id !== next.assigned_driver_id) return d;
         let updated = { ...d, is_busy: false };
-        if (who === "client" && stars && d.id === (next.long_distance_driver_id ?? next.assigned_driver_id)) {
+        if (stars && d.id === driverId) {
           const count = d.rating_count + 1;
           const avg = (d.rating_avg * d.rating_count + stars) / count;
           updated = { ...updated, rating_avg: Math.round(avg * 100) / 100, rating_count: count };
         }
-        return updated.id === d.id ? updated : d;
+        return updated;
       });
-      // Fix rating update properly
-      const rateId = next.long_distance_driver_id ?? next.assigned_driver_id;
-      if (stars && rateId) {
-        drivers = drivers.map((d) => {
-          if (d.id !== rateId) {
-            if (d.id === next.assigned_driver_id) return { ...d, is_busy: false };
-            return d;
-          }
-          const count = d.rating_count + 1;
-          const avg = (d.rating_avg * d.rating_count + stars) / count;
-          return {
-            ...d,
-            is_busy: false,
-            rating_avg: Math.round(avg * 100) / 100,
-            rating_count: count,
-          };
-        });
-      }
     }
   } else {
     next = { ...next, status: "awaiting_confirmation" };
@@ -1566,17 +1519,15 @@ export function markNotificationsRead(state: DemoState, notifIds: string[]): Dem
 }
 
 function notifyUser(
-  state: Pick<DemoState, "notifications" | "pending_pushes">,
+  state: Pick<DemoState, "notifications">,
   input: {
     userId: string;
     title: string;
     body: string;
     kind?: NotificationKind;
     orderId?: string;
-    orderNumber?: number;
-    queuePush?: boolean;
   },
-): Pick<DemoState, "notifications" | "pending_pushes"> {
+): Pick<DemoState, "notifications"> {
   const createdAt = new Date().toISOString();
   const kind = input.kind ?? "generic";
   const notification: Notification = {
@@ -1589,26 +1540,8 @@ function notifyUser(
     kind,
     order_id: input.orderId,
   };
-  const pending_pushes = input.queuePush
-    ? [
-        {
-          id: uid(),
-          user_id: input.userId,
-          title: input.title,
-          body: input.body,
-          data: {
-            type: kind,
-            order_id: input.orderId,
-            order_number: input.orderNumber,
-          },
-          created_at: createdAt,
-        },
-        ...(state.pending_pushes ?? []),
-      ]
-    : (state.pending_pushes ?? []);
   return {
     notifications: [notification, ...state.notifications],
-    pending_pushes,
   };
 }
 
@@ -1962,29 +1895,25 @@ export function cancelOrder(
     ),
   ];
   let notifications = state.notifications;
-  let pending_pushes = state.pending_pushes ?? [];
   if (order.status === "accepted" && driverIds.length > 0) {
     const title = "Order cancelled";
     const body = `The client cancelled order ${formatOrderNumber(order.order_number)}. You are free to take other jobs.`;
     for (const driverId of driverIds) {
       const next = notifyUser(
-        { notifications, pending_pushes },
+        { notifications },
         {
           userId: driverId,
           title,
           body,
           kind: "order_cancelled",
           orderId: order.id,
-          orderNumber: order.order_number,
-          queuePush: true,
         },
       );
       notifications = next.notifications;
-      pending_pushes = next.pending_pushes;
     }
   }
 
-  return { state: { ...state, orders, drivers, notifications, pending_pushes } };
+  return { state: { ...state, orders, drivers, notifications } };
 }
 
 export function rejectOrder(
