@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 export const USER_ROLES = ["admin", "client", "business", "driver"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
@@ -268,13 +266,10 @@ export function workDayRange(at: Date = new Date()): { start: Date; end: Date } 
 export type DeliveryQuote = {
   distanceKm: number;
   multiplier: number;
-  base: number;
   baseUsd: number;
   baseLbp: number;
-  night: number;
   nightUsd: number;
   nightLbp: number;
-  total: number;
   totalUsd: number;
   totalLbp: number;
 };
@@ -310,13 +305,10 @@ export function quoteDeliveryPrice(
   return {
     distanceKm: distance,
     multiplier,
-    base: baseUsd,
     baseUsd,
     baseLbp,
-    night: nightUsd,
     nightUsd,
     nightLbp,
-    total: totalUsd,
     totalUsd,
     totalLbp,
   };
@@ -380,7 +372,7 @@ export function clampQuoteToBusinessCosts(
   const totalLbp = roundLbp(
     Math.min(costs.order_max_lbp, Math.max(costs.order_min_lbp, quote.totalLbp)),
   );
-  return { ...quote, total: totalUsd, totalUsd, totalLbp };
+  return { ...quote, totalUsd, totalLbp };
 }
 
 /** Percentage applies to base only; night surcharge stays with the driver. */
@@ -410,25 +402,6 @@ export function canAcceptAnotherOrder(
   return activeCount < 1;
 }
 
-export function driverTypeForOrder(orderType: OrderType): DriverType | "admin" {
-  switch (orderType) {
-    case "normal":
-      return "fast";
-    case "long_distance":
-      return "fast";
-    case "trusted":
-      return "trusted";
-    case "private":
-      return "private";
-    case "owner":
-      return "admin";
-    case "medical":
-      return "medical";
-    default:
-      return "fast";
-  }
-}
-
 export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
   normal: "Fast delivery",
   long_distance: "Long distance",
@@ -446,64 +419,6 @@ export const DRIVER_TYPE_LABELS: Record<DriverType, string> = {
   owner: "Direct team",
   medical: "Medical driver",
 };
-
-export const registerSchema = z
-  .object({
-    full_name: z.string().min(2, "Enter your full name"),
-    email: z.string().email("Enter a valid email"),
-    phone: z
-      .string()
-      .min(8, "Enter a valid phone number")
-      .regex(/^[0-9+\s-]+$/, "Phone can only contain numbers"),
-    password: z.string().min(6, "Password must be at least 6 characters"),
-    confirm_password: z.string(),
-    role: z.enum(["client", "business", "driver"]),
-    business_name: z.string().optional(),
-    business_address: z.string().optional(),
-    business_lat: z.number().optional(),
-    business_lng: z.number().optional(),
-    driver_type: z.enum(DRIVER_TYPES).optional(),
-  })
-  .refine((d) => d.password === d.confirm_password, {
-    message: "Passwords must match",
-    path: ["confirm_password"],
-  })
-  .refine((d) => d.role !== "business" || (d.business_name && d.business_name.length >= 2), {
-    message: "Enter your business name",
-    path: ["business_name"],
-  })
-  .refine(
-    (d) =>
-      d.role !== "business" ||
-      (d.business_address &&
-        d.business_address.length >= 3 &&
-        typeof d.business_lat === "number" &&
-        typeof d.business_lng === "number"),
-    {
-      message: "Pin your shop on the map",
-      path: ["business_address"],
-    },
-  )
-  .refine((d) => d.role !== "driver" || !!d.driver_type, {
-    message: "Choose a driver type",
-    path: ["driver_type"],
-  });
-
-export const loginSchema = z.object({
-  identifier: z.string().min(3, "Enter email or phone"),
-  password: z.string().min(1, "Enter your password"),
-});
-
-export const createOrderSchema = z.object({
-  pickup_address: z.string().min(3, "Where should we pick up?"),
-  pickup_lat: z.number(),
-  pickup_lng: z.number(),
-  dropoff_address: z.string().min(3, "Where should we deliver?"),
-  dropoff_lat: z.number(),
-  dropoff_lng: z.number(),
-  product_description: z.string().min(2, "What are we delivering?"),
-  order_type: z.enum(PUBLIC_ORDER_TYPES as unknown as [OrderType, ...OrderType[]]),
-});
 
 export function haversineKm(
   lat1: number,
