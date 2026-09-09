@@ -1132,14 +1132,6 @@ export function confirmDelivery(
 ): { state: DemoState; error?: string } {
   const order = state.orders.find((o) => o.id === orderId);
   if (!order) return { state, error: "Order not found" };
-  if (!["arrived", "awaiting_confirmation"].includes(order.status) && order.status !== "completed") {
-    if (order.status !== "in_transit" && order.status !== "picked_up") {
-      // allow confirm only after arrived
-    }
-  }
-  if (!["awaiting_confirmation", "arrived", "in_transit", "picked_up"].includes(order.status)) {
-    // For simplicity after "arrived" maps to awaiting_confirmation
-  }
 
   let next = { ...order };
   if (who === "client") {
@@ -1164,36 +1156,18 @@ export function confirmDelivery(
       status: "completed",
       completed_at: new Date().toISOString(),
     };
-    const driverId = next.long_distance_driver_id ?? next.assigned_driver_id;
+    const driverId = orderLinkedDriverId(next);
     if (driverId) {
       drivers = drivers.map((d) => {
         if (d.id !== driverId && d.id !== next.assigned_driver_id) return d;
         let updated = { ...d, is_busy: false };
-        if (who === "client" && stars && d.id === (next.long_distance_driver_id ?? next.assigned_driver_id)) {
+        if (stars && d.id === driverId) {
           const count = d.rating_count + 1;
           const avg = (d.rating_avg * d.rating_count + stars) / count;
           updated = { ...updated, rating_avg: Math.round(avg * 100) / 100, rating_count: count };
         }
-        return updated.id === d.id ? updated : d;
+        return updated;
       });
-      // Fix rating update properly
-      const rateId = next.long_distance_driver_id ?? next.assigned_driver_id;
-      if (stars && rateId) {
-        drivers = drivers.map((d) => {
-          if (d.id !== rateId) {
-            if (d.id === next.assigned_driver_id) return { ...d, is_busy: false };
-            return d;
-          }
-          const count = d.rating_count + 1;
-          const avg = (d.rating_avg * d.rating_count + stars) / count;
-          return {
-            ...d,
-            is_busy: false,
-            rating_avg: Math.round(avg * 100) / 100,
-            rating_count: count,
-          };
-        });
-      }
     }
   } else {
     next = { ...next, status: "awaiting_confirmation" };
