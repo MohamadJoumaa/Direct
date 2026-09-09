@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -8,13 +9,7 @@ import { toast } from "sonner";
 import { PUBLIC_DRIVER_TYPES, DRIVER_TYPE_LABELS, type DriverType, type UserRole } from "@direct/shared";
 import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
-import {
-  DeliveryMap,
-  MapsProvider,
-  PlaceSearch,
-  reverseGeocode,
-  useMapsAvailable,
-} from "@/components/delivery-map";
+import { mapsConfigured } from "@/components/maps-config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,16 +25,46 @@ import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+const BusinessShopLocation = dynamic(
+  () => import("./business-shop-location").then((mod) => mod.BusinessShopLocation),
+  { ssr: false, loading: () => <div className="h-80 w-full rounded-xl bg-muted" /> },
+);
+
 const inputClass =
   "h-12 rounded-xl border-transparent bg-muted text-base shadow-none focus-visible:border-foreground";
 
-export default function RegisterPage() {
+function AuthPageFallback({ title }: { title: string }) {
   return (
-    <MapsProvider>
-      <Suspense>
-        <RegisterForm />
-      </Suspense>
-    </MapsProvider>
+    <div className="flex min-h-screen flex-col bg-background" aria-busy="true">
+      <header className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4">
+        <Link href="/" className="flex items-center gap-2">
+          <Image src="/logo-icon.png" alt="Direct logo" width={45} height={35} className="h-9 w-auto" unoptimized />
+          <span className="text-xl font-extrabold tracking-tight">Direct</span>
+        </Link>
+        <div className="flex items-center gap-1.5">
+          <LanguageToggle />
+          <ThemeToggle />
+        </div>
+      </header>
+      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 py-10">
+        <h1 className="text-3xl font-extrabold tracking-tight">{title}</h1>
+        <div className="mt-8 flex flex-col gap-4">
+          <div className="h-12 w-full rounded-xl bg-muted" />
+          <div className="h-12 w-full rounded-xl bg-muted" />
+          <div className="h-12 w-full rounded-xl bg-muted" />
+          <div className="h-12 w-full rounded-xl bg-muted" />
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export default function RegisterPage() {
+  const { dict } = useI18n();
+  return (
+    <Suspense fallback={<AuthPageFallback title={dict.auth.createYourAccount} />}>
+      <RegisterForm />
+    </Suspense>
   );
 }
 
@@ -48,7 +73,6 @@ function RegisterForm() {
   const searchParams = useSearchParams();
   const { register } = useStore();
   const { dict } = useI18n();
-  const mapsAvailable = useMapsAvailable();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -79,7 +103,7 @@ function RegisterForm() {
       return;
     }
     if (role === "business") {
-      const pin = shopPin ?? (!mapsAvailable ? { lat: 33.8938, lng: 35.5018 } : null);
+      const pin = shopPin ?? (!mapsConfigured() ? { lat: 33.8938, lng: 35.5018 } : null);
       if (!pin || shopAddress.trim().length < 3) {
         toast.error(dict.auth.pinRequired);
         return;
@@ -182,50 +206,12 @@ function RegisterForm() {
                   required
                 />
               </div>
-              <div className="flex flex-col gap-2">
-                <Label className="text-sm font-medium">{dict.auth.shopLocation}</Label>
-                <p className="text-sm text-muted-foreground">{dict.auth.shopLocationHint}</p>
-                {mapsAvailable ? (
-                  <PlaceSearch
-                    placeholder={dict.order.searchPlace}
-                    className="h-12 text-lg"
-                    onSelect={(place) => {
-                      setShopAddress(place.address);
-                      setShopPin({ lat: place.lat, lng: place.lng });
-                    }}
-                  />
-                ) : null}
-                <Input
-                  className={inputClass}
-                  value={shopAddress}
-                  onChange={(e) => setShopAddress(e.target.value)}
-                  placeholder={dict.admin.address}
-                  required
-                />
-                <DeliveryMap
-                  standalone={false}
-                  height="240px"
-                  markers={
-                    shopPin
-                      ? [
-                          {
-                            id: "shop",
-                            lat: shopPin.lat,
-                            lng: shopPin.lng,
-                            label: dict.auth.shopLocation,
-                            place: shopAddress,
-                            kind: "pickup" as const,
-                          },
-                        ]
-                      : []
-                  }
-                  onMapClick={async (lat, lng) => {
-                    setShopPin({ lat, lng });
-                    setShopAddress(await reverseGeocode(lat, lng));
-                  }}
-                  routeHint={dict.order.mapTip}
-                />
-              </div>
+              <BusinessShopLocation
+                shopAddress={shopAddress}
+                shopPin={shopPin}
+                onAddressChange={setShopAddress}
+                onPinChange={setShopPin}
+              />
             </>
           ) : null}
           {role === "driver" ? (
@@ -245,7 +231,7 @@ function RegisterForm() {
                 <SelectContent>
                   <SelectGroup>
                     {PUBLIC_DRIVER_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t}>
+                      <SelectItem key={t} value={t}>
                         {DRIVER_TYPE_LABELS[t]}
                       </SelectItem>
                     ))}

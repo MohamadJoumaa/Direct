@@ -47,9 +47,21 @@ const PRESETS = [
 
 type Point = { address: string; lat: number; lng: number };
 
+function NewOrderFallback() {
+  const { dict } = useI18n();
+  return (
+    <div className="flex flex-col gap-6" aria-busy="true">
+      <h1 className="heading-easy">{dict.order.createTitle}</h1>
+      <div className="h-10 w-40 rounded-xl bg-muted" />
+      <div className="h-64 w-full rounded-xl bg-muted" />
+      <div className="h-80 w-full rounded-xl bg-muted" />
+    </div>
+  );
+}
+
 export default function NewOrderPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<NewOrderFallback />}>
       <MapsProvider>
         <NewOrderContent />
       </MapsProvider>
