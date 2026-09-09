@@ -96,9 +96,9 @@ Copy `apps/web/.env.example` to `apps/web/.env.local` and set `NEXT_PUBLIC_GOOGL
 The live UI does not read these keys yet. The SQL is ready for a production cutover:
 
 1. Create a Supabase project.
-2. Run the files in `supabase/migrations` in order.
+2. Apply the whole `supabase/migrations` folder in order (`supabase db push` on a linked project, or `supabase db reset` locally). Do not apply only `20260828000000_init.sql`.
 3. Copy `apps/web/.env.example` to `apps/web/.env.local` and fill `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-4. Promote an admin with `supabase/seed_admin.sql` (Auth `raw_app_meta_data.role = admin`).
+4. Promote an admin with `supabase/seed_admin.sql` (Auth `raw_app_meta_data.role = admin`, which becomes JWT `app_metadata`, not `profiles.role`).
 
 ## License
 
