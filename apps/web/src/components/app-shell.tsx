@@ -126,11 +126,7 @@ function DriverCancelAlerts() {
       : [];
 
   useEffect(() => {
-    if (!userId || effectiveRole !== "driver") return;
-    const unread = state.notifications.filter(
-      (n) => n.user_id === userId && n.kind === "order_cancelled" && !n.read,
-    );
-    for (const n of unread) {
+    for (const n of cancels) {
       if (toastedCancelIds.has(n.id)) continue;
       toastedCancelIds.add(n.id);
       const copy = notificationCopy(n, dict, state.orders);
@@ -212,13 +208,6 @@ export function AppShell({
     { href: "/app/profile", label: dict.nav.profile, icon: User },
   ];
 
-  const businessLinks = [
-    { href: "/app/client", label: dict.nav.home, icon: LayoutDashboard },
-    { href: "/app/client/new", label: dict.nav.newOrder, icon: Package },
-    { href: "/app/client/history", label: dict.nav.history, icon: History },
-    { href: "/app/profile", label: dict.nav.profile, icon: User },
-  ];
-
   const driverLinks = [
     { href: "/app/driver", label: dict.nav.ordersTab, icon: Package },
     { href: "/app/driver/history", label: dict.nav.history, icon: History },
@@ -243,9 +232,7 @@ export function AppShell({
       ? adminLinks
       : effectiveRole === "driver"
         ? driverLinks
-        : effectiveRole === "business"
-          ? businessLinks
-          : clientLinks;
+        : clientLinks;
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/40">
