@@ -14,9 +14,7 @@ type I18nContextValue = {
   lang: Lang;
   dir: "ltr" | "rtl";
   dict: Dictionary;
-  setLang: (lang: Lang) => void;
   toggleLang: () => void;
-  t: (path: string, vars?: Record<string, string | number>) => string;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -24,19 +22,6 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 /** Replace {placeholders} in a dictionary string. */
 export function fmt(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
-}
-
-function lookup(dict: Dictionary, path: string): string | undefined {
-  const parts = path.split(".");
-  let cur: unknown = dict;
-  for (const part of parts) {
-    if (cur && typeof cur === "object" && part in cur) {
-      cur = (cur as Record<string, unknown>)[part];
-    } else {
-      return undefined;
-    }
-  }
-  return typeof cur === "string" ? cur : undefined;
 }
 
 export function orderStatusLabel(status: OrderStatus | string, dict: Dictionary): string {
@@ -73,11 +58,6 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
   }, [lang]);
 
-  const setLang = useCallback((next: Lang) => {
-    setLangState(next);
-    window.localStorage.setItem(STORAGE_KEY, next);
-  }, []);
-
   const toggleLang = useCallback(() => {
     setLangState((prev) => {
       const next = prev === "en" ? "ar" : "en";
@@ -86,23 +66,13 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const t = useCallback(
-    (path: string, vars?: Record<string, string | number>) => {
-      const raw = lookup(DICTS[lang], path) ?? path;
-      return vars ? fmt(raw, vars) : raw;
-    },
-    [lang],
-  );
-
   return (
     <I18nContext.Provider
       value={{
         lang,
         dir: lang === "ar" ? "rtl" : "ltr",
         dict: DICTS[lang],
-        setLang,
         toggleLang,
-        t,
       }}
     >
       {children}
