@@ -173,13 +173,7 @@ function DriverCancelAlerts() {
   );
 }
 
-export function AppShell({
-  children,
-  title,
-}: {
-  children: React.ReactNode;
-  title?: string;
-}) {
+export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, effectiveRole, isAdmin, driver } = useAuth();
@@ -227,12 +221,22 @@ export function AppShell({
     { href: "/app/profile", label: dict.nav.profile, icon: User },
   ];
 
+  const businessLinks = [
+    { href: "/app/client", label: dict.nav.home, icon: LayoutDashboard },
+    { href: "/app/client/new", label: dict.nav.newOrder, icon: Package },
+    { href: "/app/client/history", label: dict.nav.history, icon: History },
+    { href: "/app/profile", label: dict.nav.profile, icon: User },
+  ];
+
   const links =
     effectiveRole === "admin"
       ? adminLinks
       : effectiveRole === "driver"
         ? driverLinks
-        : clientLinks;
+        : effectiveRole === "business"
+          ? businessLinks
+          : clientLinks;
+  const headerTitle = links.find((link) => pathname === link.href)?.label;
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/40">
@@ -250,8 +254,8 @@ export function AppShell({
               />
               <span className="text-xl font-extrabold tracking-tight">Direct</span>
             </Link>
-            {title ? (
-              <span className="hidden text-muted-foreground sm:inline">· {title}</span>
+            {headerTitle ? (
+              <span className="hidden text-muted-foreground sm:inline">· {headerTitle}</span>
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">

@@ -12,7 +12,6 @@ import {
   withBusinessOrderCosts,
   type OrderType,
 } from "@direct/shared";
-import { AppShell } from "@/components/app-shell";
 import {
   DeliveryMap,
   MapsProvider,
@@ -191,7 +190,6 @@ function NewOrderContent() {
   }
 
   return (
-    <AppShell title={dict.nav.newOrder}>
       <div className="flex flex-col gap-6">
           <h1 className="heading-easy">{dict.order.createTitle}</h1>
           <p className="text-easy text-muted-foreground">
@@ -520,6 +518,5 @@ function NewOrderContent() {
             routeHint={dict.order.nearbyHint}
           />
       </div>
-    </AppShell>
   );
 }

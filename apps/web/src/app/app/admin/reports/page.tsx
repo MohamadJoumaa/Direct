@@ -1,7 +1,6 @@
 "use client";
 
 import { toast } from "sonner";
-import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
@@ -13,14 +12,11 @@ export default function AdminReportsPage() {
   const { state, resolveReport } = useStore();
   if (!isAdmin) {
     return (
-      <AppShell>
         <p className="text-easy">Admin only.</p>
-      </AppShell>
     );
   }
 
   return (
-    <AppShell title="Reports">
       <Card className="border-2">
         <CardHeader>
           <CardTitle className="heading-easy">Driver reports (fake data)</CardTitle>
@@ -73,6 +69,5 @@ export default function AdminReportsPage() {
           )}
         </CardContent>
       </Card>
-    </AppShell>
   );
 }

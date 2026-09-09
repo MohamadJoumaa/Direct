@@ -14,6 +14,12 @@ import { useStore } from "@/lib/store-context";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n";
 
+function appHome(role: string | null | undefined) {
+  if (role === "admin") return "/app/admin";
+  if (role === "driver") return "/app/driver";
+  return "/app/client";
+}
+
 function LoginFallback() {
   const { dict } = useI18n();
   return (
@@ -51,7 +57,7 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login } = useStore();
+  const { login, state } = useStore();
   const { user, effectiveRole } = useAuth();
   const { dict } = useI18n();
   const [identifier, setIdentifier] = useState("");
@@ -61,13 +67,7 @@ function LoginForm() {
 
   useEffect(() => {
     if (user && effectiveRole) {
-      const dest =
-        effectiveRole === "admin"
-          ? "/app/admin"
-          : effectiveRole === "driver"
-            ? "/app/driver"
-            : "/app/client";
-      router.replace(dest);
+      router.replace(appHome(effectiveRole));
     }
   }, [user, effectiveRole, router]);
 
@@ -79,7 +79,15 @@ function LoginForm() {
       return;
     }
     toast.success(dict.auth.welcomeBackToast);
-    router.push("/app");
+    const needle = identifier.trim().toLowerCase();
+    const phoneDigits = identifier.replace(/\D/g, "");
+    const profile = state.profiles.find(
+      (p) =>
+        p.email.toLowerCase() === needle ||
+        p.phone === identifier ||
+        (phoneDigits.length > 0 && p.phone.replace(/\D/g, "") === phoneDigits),
+    );
+    router.push(appHome(profile?.role));
   }
 
   const subtitle =

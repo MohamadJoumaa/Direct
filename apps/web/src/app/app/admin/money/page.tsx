@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { Menu } from "lucide-react";
 import { toast } from "sonner";
 import { percentageAccrued, subscriptionBudget, driverRevenue, driverDailyProfit } from "@/lib/demo-store";
-import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -45,9 +44,7 @@ export default function AdminMoneyPage() {
   const { state, confirmWhish } = useStore();
   if (!isAdmin) {
     return (
-      <AppShell>
         <p className="text-easy">Admin only.</p>
-      </AppShell>
     );
   }
 
@@ -76,7 +73,6 @@ export default function AdminMoneyPage() {
   const selectedPeriod = periods.find((p) => p.key === period) ?? periods[2];
 
   return (
-    <AppShell title="Budget">
       <div className="flex flex-col gap-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <Card className="border-2 bg-primary text-primary-foreground">
@@ -197,6 +193,5 @@ export default function AdminMoneyPage() {
           </CardContent>
         </Card>
       </div>
-    </AppShell>
   );
 }

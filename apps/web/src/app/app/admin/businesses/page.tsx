@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Store, CircleDollarSign } from "lucide-react";
 import { formatDeliveryCash, withBusinessOrderCosts } from "@direct/shared";
-import { AppShell } from "@/components/app-shell";
 import {
   DeliveryMap,
   MapsProvider,
@@ -70,9 +69,7 @@ function BusinessesContent() {
 
   if (!isAdmin) {
     return (
-      <AppShell>
         <p className="text-easy">{dict.common.adminOnly}</p>
-      </AppShell>
     );
   }
 
@@ -109,7 +106,6 @@ function BusinessesContent() {
   }
 
   return (
-    <AppShell title={dict.nav.businesses}>
       <div className="flex flex-col gap-6">
         <h1 className="heading-easy">{dict.admin.businessesTitle}</h1>
 
@@ -228,7 +224,6 @@ function BusinessesContent() {
           </>
         )}
       </div>
-    </AppShell>
   );
 }
 

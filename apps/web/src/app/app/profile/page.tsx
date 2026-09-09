@@ -5,7 +5,6 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { Camera, Star, ShieldCheck } from "lucide-react";
 import { formatDeliveryCash, withBusinessOrderCosts, type RevenueMode } from "@direct/shared";
-import { AppShell } from "@/components/app-shell";
 import { ProfilePhoto } from "@/components/profile-photo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,7 +91,6 @@ export default function ProfilePage() {
   }
 
   return (
-    <AppShell title={dict.profile.title}>
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
         <Card className="border-2">
           <CardContent className="flex flex-wrap items-center gap-5 pt-6">
@@ -366,6 +364,5 @@ export default function ProfilePage() {
           </Card>
         ) : null}
       </div>
-    </AppShell>
   );
 }

@@ -2,7 +2,6 @@
 
 import { toast } from "sonner";
 import { FileText, Phone } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
 import { DocumentAttachment } from "@/components/document-attachment";
 import { ProfilePhoto } from "@/components/profile-photo";
 import { Badge } from "@/components/ui/badge";
@@ -22,9 +21,7 @@ export default function AdminDocumentsPage() {
 
   if (!isAdmin || !user) {
     return (
-      <AppShell>
         <p className="text-easy">{dict.common.adminOnly}</p>
-      </AppShell>
     );
   }
 
@@ -45,7 +42,6 @@ export default function AdminDocumentsPage() {
   });
 
   return (
-    <AppShell title={dict.admin.documentsTitle}>
       <div className="flex flex-col gap-6">
         {driversWithDocs.length === 0 ? (
           <Card className="border-2">
@@ -156,6 +152,5 @@ export default function AdminDocumentsPage() {
           })
         )}
       </div>
-    </AppShell>
   );
 }

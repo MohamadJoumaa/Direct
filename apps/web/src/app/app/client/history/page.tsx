@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { formatDeliveryCash } from "@direct/shared";
-import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -32,10 +31,8 @@ export default function ClientHistoryPage() {
   const { query, setQuery, showSearch, filtered } = useOrderSearch(history, (o) =>
     orderPartyExtras(o, state.profiles),
   );
-  if (!user) return null;
 
   return (
-    <AppShell title={dict.nav.history}>
       <Card className="border-2">
         <CardHeader className="flex flex-col gap-3">
           <CardTitle className="heading-easy">{dict.client.pastDeliveries}</CardTitle>
@@ -83,6 +80,5 @@ export default function ClientHistoryPage() {
           )}
         </CardContent>
       </Card>
-    </AppShell>
   );
 }

@@ -124,7 +124,7 @@ function RegisterForm() {
         return;
       }
       toast.success(dict.auth.accountCreated);
-      router.push("/app");
+      router.push("/app/client");
       return;
     }
     const err = register({
@@ -140,7 +140,7 @@ function RegisterForm() {
       return;
     }
     toast.success(dict.auth.accountCreated);
-    router.push("/app");
+    router.push(role === "driver" ? "/app/driver" : "/app/client");
   }
 
   return (

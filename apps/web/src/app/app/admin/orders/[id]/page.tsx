@@ -5,14 +5,13 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 import { formatDeliveryCash } from "@direct/shared";
-import { AppShell } from "@/components/app-shell";
 import { DeliveryMap } from "@/components/delivery-map";
 import { OrderReceipt } from "@/components/order-receipt";
 import { ProfilePhoto } from "@/components/profile-photo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
-import { formatOrderNumber, profilePhotoUrl } from "@/lib/demo-store";
+import { profilePhotoUrl } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
 
@@ -26,16 +25,12 @@ export default function AdminOrderDetailPage() {
   const order = state.orders.find((o) => o.id === params.id);
   if (!user || !isAdmin) {
     return (
-      <AppShell>
         <p className="text-easy">{dict.common.adminOnly}</p>
-      </AppShell>
     );
   }
   if (!order) {
     return (
-      <AppShell>
         <p className="text-easy">{dict.common.orderNotFound}</p>
-      </AppShell>
     );
   }
 
@@ -52,7 +47,6 @@ export default function AdminOrderDetailPage() {
     (order.status === "at_warehouse" && order.order_type === "long_distance");
 
   return (
-    <AppShell title={`${dict.common.orderNumber} ${formatOrderNumber(order.order_number)}`}>
       <div className="flex flex-col gap-6">
         <Link
           href="/app/admin"
@@ -250,6 +244,5 @@ export default function AdminOrderDetailPage() {
           />
         )}
       </div>
-    </AppShell>
   );
 }
