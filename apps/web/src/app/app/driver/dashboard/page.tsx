@@ -2,11 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { Menu } from "lucide-react";
-import { WHISH_NUMBER } from "@direct/shared";
-import { driverCommissionTotals, driverCompanyPayMode, driverDailyProfit, driverRevenue, formatOrderNumber } from "@/lib/demo-store";
+import { driverCommissionTotals, driverCompanyPayMode, driverDailyProfit, driverPayDueUsd, driverRevenue, formatOrderNumber } from "@/lib/demo-store";
 import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
-import { Button } from "@/components/ui/button";
+import { DriverWhishActions } from "@/components/driver-whish-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -24,10 +23,9 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 
 const chartConfig = {
   profit: { label: "Profit $", color: "var(--gold)" },
@@ -37,10 +35,9 @@ type Period = "today" | "yesterday" | "week" | "month";
 
 export default function DriverDashboardPage() {
   const { user, driver } = useAuth();
-  const { state, requestPay, confirmWhish } = useStore();
+  const { state } = useStore();
   const { dict } = useI18n();
   const [period, setPeriod] = useState<Period>("week");
-  const [checking, setChecking] = useState(false);
 
   const chartData = useMemo(
     () => (user ? driverDailyProfit(state, user.id, period) : []),
@@ -71,84 +68,7 @@ export default function DriverDashboardPage() {
   const commission = percentageMode
     ? driverCommissionTotals(state, user.id)
     : { dueNow: 0, accruingToday: 0 };
-  const payKind = percentageMode ? "commission" : "subscription";
-  const pendingApiTx = state.whish.find(
-    (t) =>
-      t.driver_id === user.id &&
-      t.source === "api" &&
-      t.status === "pending" &&
-      t.kind === payKind,
-  );
-
-  const dueAmount = percentageMode
-    ? commission.dueNow
-    : state.settings.subscription_price_usd +
-      (driver.subscription_status === "frozen" ? state.settings.freeze_penalty_usd : 0);
-
-  async function payWithWhish() {
-    if (percentageMode && dueAmount <= 0) {
-      toast.info(dict.driver.accruingTodayHint);
-      return;
-    }
-    setChecking(true);
-    try {
-      const res = await fetch("/api/whish/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: dueAmount,
-          phone: user!.phone,
-          note: percentageMode
-            ? `Direct commission — ${user!.full_name}`
-            : `Direct subscription — ${user!.full_name}`,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.configured) {
-        toast.info(`Whish API is not configured — pay manually to ${WHISH_NUMBER}`);
-        return;
-      }
-      requestPay(user!.id, {
-        source: "api",
-        externalId: data.externalId,
-        kind: payKind,
-        amount: dueAmount,
-      });
-      if (data.collectUrl) window.open(data.collectUrl, "_blank", "noopener");
-      toast.success("Whish payment created — finish it in the Whish app");
-    } catch {
-      toast.info(`Whish is unreachable — pay manually to ${WHISH_NUMBER}`);
-    } finally {
-      setChecking(false);
-    }
-  }
-
-  async function checkWhishStatus() {
-    if (!pendingApiTx) return;
-    setChecking(true);
-    try {
-      const res = await fetch("/api/whish/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ externalId: pendingApiTx.external_id }),
-      });
-      const data = await res.json();
-      if (data.paid) {
-        confirmWhish(pendingApiTx.id);
-        toast.success(
-          percentageMode
-            ? dict.driver.commissionPaymentConfirmed
-            : dict.driver.paymentConfirmed,
-        );
-      } else {
-        toast.info(dict.driver.notPaidYet);
-      }
-    } catch {
-      toast.error("Could not check the payment right now");
-    } finally {
-      setChecking(false);
-    }
-  }
+  const payDue = driverPayDueUsd(state, driver);
 
   return (
     <AppShell title={dict.nav.money}>
@@ -241,9 +161,6 @@ export default function DriverDashboardPage() {
                     {dict.driver.accruingTodayHint}
                   </span>
                 </p>
-                <p>
-                  ${dueAmount.toFixed(2)} via Whish → <strong>{WHISH_NUMBER}</strong>
-                </p>
               </>
             ) : (
               <>
@@ -262,44 +179,20 @@ export default function DriverDashboardPage() {
                   </strong>
                 </p>
                 <p>
-                  ${dueAmount} via Whish → <strong>{WHISH_NUMBER}</strong>
+                  {fmt(dict.driver.amountDue, {
+                    amount: payDue.amount.toFixed(2),
+                  })}
                 </p>
+                {driver.subscription_status === "frozen" ? (
+                  <p>
+                    {fmt(dict.driver.freezePenaltyNote, {
+                      penalty: state.settings.freeze_penalty_usd.toFixed(2),
+                    })}
+                  </p>
+                ) : null}
               </>
             )}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="lg"
-                className="touch-target rounded-full"
-                disabled={checking || (percentageMode && dueAmount <= 0)}
-                onClick={payWithWhish}
-              >
-                {dict.driver.payWithWhish}
-              </Button>
-              {pendingApiTx ? (
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="touch-target rounded-full"
-                  disabled={checking}
-                  onClick={checkWhishStatus}
-                >
-                  {dict.driver.checkPayment}
-                </Button>
-              ) : (
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="touch-target rounded-full"
-                  disabled={percentageMode && dueAmount <= 0}
-                  onClick={() => {
-                    requestPay(user.id, { kind: payKind, amount: dueAmount });
-                    toast.success(dict.driver.paidLogged);
-                  }}
-                >
-                  {dict.driver.iPaid}
-                </Button>
-              )}
-            </div>
+            <DriverWhishActions kind={payDue.kind} dueAmount={payDue.amount} />
           </CardContent>
         </Card>
 

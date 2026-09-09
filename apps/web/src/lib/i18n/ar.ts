@@ -242,7 +242,27 @@ export const ar: Dictionary = {
     paidLogged: "تم تسجيل الدفع — بانتظار التأكيد",
     profileRequired: "يجب إكمال ملف السائق.",
     subscriptionNeeded: "يلزمك اشتراك",
+    subscriptionNeededBody:
+      "ادفع {amount}$ عبر Whish Pay لتفعيل قبول الطلبات. ستُدخل رقم هاتفك ورمز التحقق في صفحة Whish.",
+    freezePenaltyNote: "يشمل غرامة تجميد {penalty}$.",
+    amountDue: "المبلغ المستحق: {amount}$",
+    waitingForPayment: "بانتظار دفع Whish — تتحقق هذه الصفحة تلقائياً.",
+    checkingPayment: "جاري العمل…",
+    whishOpened: "أكمل الدفع في Whish (الهاتف ورمز التحقق) ثم عد إلى هنا.",
+    whishOpenedNoUrl:
+      "تم إنشاء الدفع. اضغط «التحقق من الدفع» بعد إتمامه في تطبيق Whish.",
+    whishNotConfigured:
+      "Whish Pay غير مُعد. ادفع يدوياً ثم اضغط «دفعت» ليؤكّد المشرف.",
+    whishUnreachable:
+      "تعذّر الوصول إلى Whish. ادفع يدوياً ثم اضغط «دفعت» ليؤكّد المشرف.",
+    whishCreateFailed: "تعذّر بدء دفع Whish. أعد المحاولة أو استخدم «دفعت».",
+    whishPayFailed: "أبلغ Whish بفشل الدفع. يمكنك المحاولة مجدداً.",
+    couldNotCheckPayment: "تعذّر التحقق من الدفع الآن",
+    whishSupportNumber:
+      "رقم دايركت على Whish {number} للدعم فقط. يُؤكَّد الدفع عبر Whish Pay وليس بالتحويل إلى هذا الرقم.",
     gracePeriod: "فترة سماح",
+    graceRenewBody:
+      "جدّد قريباً وإلا يُجمَّد حسابك بعد {days} أيام. يمكنك الدفع الآن عبر Whish Pay.",
     driverOrders: "طلبات السائق",
     goOnlineLocation: "الاتصال مع تفعيل الموقع",
     activeJobs: "الجارية",
@@ -262,7 +282,7 @@ export const ar: Dictionary = {
     yourPay: "أجرتك",
     commissionDue: "عمولة الشركة مستحقة",
     commissionDueBody:
-      "ادفع {amount}$ عبر Whish إلى {number} قبل قبول طلبات جديدة. ثم اضغط «دفعت».",
+      "ادفع {amount}$ عبر Whish Pay قبل قبول طلبات جديدة. ستُدخل رقم هاتفك ورمز التحقق في صفحة Whish.",
     dueNow: "مستحق الآن",
     accruingToday: "مستحقات اليوم",
     accruingTodayHint: "لا تُستحق قبل الساعة 7 صباحاً بتوقيت بيروت",
@@ -312,7 +332,7 @@ export const ar: Dictionary = {
     companyPayTitle: "الدفع لدايركت",
     companyPayHint: "اختر كيف تدفع للشركة: اشتراك شهري، أو نسبة من كل توصيل.",
     payPlanSubscription: "اشتراك شهري",
-    payPlanSubscriptionDesc: "${price} في الشهر",
+    payPlanSubscriptionDesc: "{price} في الشهر",
     payPlanPercentage: "نسبة من كل طلب",
     payPlanPercentageDesc: "{pct}% من كل توصيل تذهب إلى دايركت",
     payPlanSaved: "تم تحديث خطة الدفع",

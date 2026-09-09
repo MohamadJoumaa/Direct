@@ -10,6 +10,9 @@ import {
   splitRevenue,
   validateBusinessOrderCosts,
   withBusinessOrderCosts,
+  classifyCommissionCut,
+  commissionDueNowUsd,
+  isDriverPaymentBlockingWork,
   workDayStart,
   type BusinessOrderCosts,
   type CompanySettings,
@@ -76,18 +79,28 @@ export type DriverReviewStatus = "paid" | "grace" | "frozen" | "banned" | "unpai
 export type DriverPayMethod = "whish" | "whish_manual" | "none";
 
 export function driverWouldBePaymentBlocked(state: DemoState | undefined, driver: Driver): boolean {
-  if (driverCompanyPayMode(driver, state?.settings) === "percentage") {
-    return state ? driverCommissionTotals(state, driver.id).dueNow > 0 : false;
-  }
-  return (
-    driver.subscription_status === "frozen" ||
-    driver.subscription_status === "pending_payment"
-  );
+  const mode = driverCompanyPayMode(driver, state?.settings);
+  const dueNowUsd =
+    mode === "percentage" && state
+      ? driverCommissionTotals(state, driver.id).dueNow
+      : 0;
+  return isDriverPaymentBlockingWork({
+    revenueMode: mode,
+    dueNowUsd,
+    subscriptionStatus: driver.subscription_status,
+  });
 }
 
 export function driverPaymentBlocked(state: DemoState, driver: Driver): boolean {
-  if (driver.payment_waived) return false;
-  return driverWouldBePaymentBlocked(state, driver);
+  const mode = driverCompanyPayMode(driver, state.settings);
+  const dueNowUsd =
+    mode === "percentage" ? driverCommissionTotals(state, driver.id).dueNow : 0;
+  return isDriverPaymentBlockingWork({
+    revenueMode: mode,
+    paymentWaived: driver.payment_waived,
+    dueNowUsd,
+    subscriptionStatus: driver.subscription_status,
+  });
 }
 
 export function driverReviewStatus(driver: Driver, state?: DemoState): DriverReviewStatus {
@@ -642,11 +655,17 @@ function migrateState(parsed: DemoState): DemoState {
       order_number: typeof o.order_number === "number" ? o.order_number : 0,
     })),
     next_order_number: parsed.next_order_number ?? FIRST_PUBLIC_ORDER_NUMBER,
-    whish: (parsed.whish ?? []).map((t) => ({
-      ...t,
-      kind: t.kind === "commission" ? "commission" : "subscription",
-      external_id: t.external_id ?? (t.source === "api" ? t.note : null),
-    })),
+    whish: (parsed.whish ?? []).map((t) => {
+      const fromNote =
+        typeof t.note === "string"
+          ? t.note.match(/Whish(?: collect)? (\d+)/)?.[1] ?? null
+          : null;
+      return {
+        ...t,
+        kind: t.kind === "commission" ? "commission" : "subscription",
+        external_id: t.external_id ?? fromNote,
+      };
+    }),
   };
   return ensureOrderNumbers(ensureAdminDriver(next));
 }
@@ -958,10 +977,14 @@ export function claimOrder(
     return { state, error: "Your account is frozen by an admin" };
   }
   if (!isAdminActor && !payOpen && !percentageMode && driver.subscription_status === "frozen") {
-    return { state, error: "Your account is frozen. Pay subscription + $10 to reactivate." };
+    const penalty = state.settings.freeze_penalty_usd;
+    return {
+      state,
+      error: `Your account is frozen. Pay subscription + $${penalty} to reactivate.`,
+    };
   }
   if (!isAdminActor && !payOpen && !percentageMode && driver.subscription_status === "pending_payment") {
-    return { state, error: "Pay your subscription first (Whish 81848663)" };
+    return { state, error: "Pay your subscription first" };
   }
 
   const activeCount = state.orders.filter(
@@ -1242,6 +1265,23 @@ export function setOnline(
   if (online && row?.admin_frozen) {
     return { state, error: "Your account is frozen by an admin" };
   }
+  if (online && row && driverPaymentBlocked(next, row)) {
+    if (driverCompanyPayMode(row, next.settings) === "percentage") {
+      const due = driverCommissionTotals(next, driverId).dueNow;
+      return {
+        state,
+        error: `Pay yesterday's company cut ($${due.toFixed(2)}) via Whish first`,
+      };
+    }
+    if (row.subscription_status === "frozen") {
+      const penalty = next.settings.freeze_penalty_usd;
+      return {
+        state,
+        error: `Your account is frozen. Pay subscription + $${penalty} to reactivate.`,
+      };
+    }
+    return { state, error: "Pay your subscription first" };
+  }
   next = {
     ...next,
     drivers: next.drivers.map((d) =>
@@ -1260,6 +1300,39 @@ export type RequestPayOpts = {
   kind?: WhishKind;
   amount?: number;
 };
+
+export function driverPayDueUsd(
+  state: DemoState,
+  driver: Driver,
+): { kind: WhishKind; amount: number } {
+  if (driverCompanyPayMode(driver, state.settings) === "percentage") {
+    return {
+      kind: "commission",
+      amount: driverCommissionTotals(state, driver.id).dueNow,
+    };
+  }
+  const frozen = driver.subscription_status === "frozen";
+  return {
+    kind: "subscription",
+    amount:
+      state.settings.subscription_price_usd +
+      (frozen ? state.settings.freeze_penalty_usd : 0),
+  };
+}
+
+export function pendingApiWhishTx(
+  state: DemoState,
+  driverId: string,
+  kind: WhishKind,
+): WhishTx | undefined {
+  return state.whish.find(
+    (t) =>
+      t.driver_id === driverId &&
+      t.source === "api" &&
+      t.status === "pending" &&
+      t.kind === kind,
+  );
+}
 
 export function requestSubscriptionPayment(
   state: DemoState,
@@ -1282,19 +1355,41 @@ export function requestSubscriptionPayment(
         (frozen ? state.settings.freeze_penalty_usd : 0));
   if (kind === "commission" && amount <= 0) return state;
   const profile = state.profiles.find((p) => p.id === driverId);
+  const source = opts?.source ?? "manual";
+  const note = opts?.externalId
+    ? `Whish collect ${opts.externalId}`
+    : kind === "commission"
+      ? `Direct commission — ${profile?.full_name ?? "driver"}`
+      : `Whish Pay ${state.settings.whish_number}`;
+
+  if (source === "api") {
+    const existing = pendingApiWhishTx(state, driverId, kind);
+    if (existing) {
+      return {
+        ...state,
+        whish: state.whish.map((t) =>
+          t.id === existing.id
+            ? {
+                ...t,
+                amount_usd: amount,
+                note,
+                external_id: opts?.externalId ?? t.external_id,
+              }
+            : t,
+        ),
+      };
+    }
+  }
+
   const tx: WhishTx = {
     id: uid(),
     driver_id: driverId,
     amount_usd: amount,
     phone_ref: profile?.phone ?? "",
-    source: opts?.source ?? "manual",
+    source,
     status: "pending",
     kind,
-    note: opts?.externalId
-      ? `Whish ${opts.externalId}`
-      : kind === "commission"
-        ? `Direct commission — ${profile?.full_name ?? "driver"}`
-        : `Pay Whish ${state.settings.whish_number}`,
+    note,
     external_id: opts?.externalId ?? null,
     created_at: new Date().toISOString(),
     confirmed_at: null,
@@ -1306,10 +1401,12 @@ export function confirmWhish(
   state: DemoState,
   txId: string,
 ): DemoState {
-  const tx = state.whish.find((t) => t.id === txId);
-  if (!tx) return state;
+  const tx = state.whish.find(
+    (t) => t.id === txId || (t.external_id != null && t.external_id === txId),
+  );
+  if (!tx || tx.status === "confirmed") return state;
   const whish = state.whish.map((t) =>
-    t.id === txId
+    t.id === tx.id
       ? { ...t, status: "confirmed" as const, confirmed_at: new Date().toISOString() }
       : t,
   );
@@ -1520,6 +1617,7 @@ function earningDriverId(order: Order): string | null {
   return order.long_distance_driver_id ?? order.assigned_driver_id;
 }
 
+/** Previous Beirut work day (and older unpaid cuts) vs current 07:00→07:00 accruals. */
 export function driverCommissionTotals(
   state: DemoState,
   driverId: string,
@@ -1532,7 +1630,7 @@ export function driverCommissionTotals(
     if (o.status !== "completed" && o.status !== "disputed") continue;
     if (earningDriverId(o) !== driverId || !o.completed_at) continue;
     const t = new Date(o.completed_at).getTime();
-    if (t < startMs) due += o.company_cut_usd;
+    if (classifyCommissionCut(t, startMs) === "due") due += o.company_cut_usd;
     else accruing += o.company_cut_usd;
   }
   const paid = state.whish
@@ -1544,7 +1642,7 @@ export function driverCommissionTotals(
     )
     .reduce((s, tx) => s + tx.amount_usd, 0);
   return {
-    dueNow: Math.round(Math.max(0, due - paid) * 100) / 100,
+    dueNow: commissionDueNowUsd(due, paid),
     accruingToday: Math.round(accruing * 100) / 100,
   };
 }

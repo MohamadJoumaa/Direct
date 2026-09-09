@@ -1,49 +1,49 @@
 import { NextResponse } from "next/server";
+import {
+  fetchCollectStatus,
+  getWhishEnv,
+  parseExternalId,
+  redirectBaseOrigin,
+} from "@/lib/whish-server";
 
 /** Checks a Whish collect request. Returns { paid: boolean }. */
 export async function POST(req: Request) {
-  const channel = process.env.WHISH_CHANNEL;
-  const secret = process.env.WHISH_SECRET;
-  const websiteUrl = process.env.WHISH_WEBSITE_URL ?? "https://direct.delivery";
-  const baseUrl =
-    process.env.WHISH_BASE_URL ?? "https://lb.sandbox.whish.money/itel-service/api";
-
-  if (!channel || !secret) {
+  const env = getWhishEnv();
+  if (!env) {
     return NextResponse.json({ configured: false, paid: false });
   }
 
-  let body: { externalId?: string };
+  let body: { externalId?: string | number };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const externalId = Number(body.externalId);
-  if (!Number.isFinite(externalId)) {
+  const externalId = parseExternalId(body.externalId);
+  if (externalId == null) {
     return NextResponse.json({ error: "Invalid externalId" }, { status: 400 });
   }
 
   try {
-    const res = await fetch(`${baseUrl}/payment/collect/status`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        channel,
-        secret,
-        websiteurl: websiteUrl,
-      },
-      body: JSON.stringify({ currency: "USD", externalId }),
-      cache: "no-store",
-    });
-    const data = await res.json();
-    const status: string | undefined = data?.data?.collectStatus;
+    const result = await fetchCollectStatus(env, externalId);
     return NextResponse.json({
       configured: true,
-      paid: status === "success",
-      status: status ?? "unknown",
+      paid: result.paid,
+      status: result.status,
     });
   } catch {
     return NextResponse.json({ error: "Whish is unreachable" }, { status: 502 });
   }
+}
+
+/**
+ * Whish may GET the callback URL. This JSON poll endpoint is not a payment
+ * callback — forward to the handler that re-verifies collect status.
+ */
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const dest = new URL("/api/whish/callback", redirectBaseOrigin(req));
+  url.searchParams.forEach((value, key) => dest.searchParams.set(key, value));
+  return NextResponse.redirect(dest, 303);
 }

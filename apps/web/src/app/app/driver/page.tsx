@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { DRIVER_TYPE_LABELS, WHISH_NUMBER } from "@direct/shared";
-import { availableOrdersForDriver, driverCommissionTotals, driverCompanyPayMode, formatOrderNumber } from "@/lib/demo-store";
+import { DRIVER_TYPE_LABELS } from "@direct/shared";
+import { availableOrdersForDriver, driverCommissionTotals, driverCompanyPayMode, driverPayDueUsd, formatOrderNumber } from "@/lib/demo-store";
 import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
+import { DriverWhishActions } from "@/components/driver-whish-actions";
 import { DeliveryMap } from "@/components/delivery-map";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +22,7 @@ import { orderPartyExtras } from "@/lib/order-search";
 
 export default function DriverHomePage() {
   const { user, driver: realDriver, isAdmin } = useAuth();
-  const { state, claimOrder, declineOffer, setOnline, requestPay } = useStore();
+  const { state, claimOrder, declineOffer, setOnline } = useStore();
   const { dict } = useI18n();
   const [locError, setLocError] = useState<string | null>(null);
   const driver =
@@ -77,6 +78,7 @@ export default function DriverHomePage() {
   const commissionDue = percentageMode
     ? driverCommissionTotals(state, user.id).dueNow
     : 0;
+  const payDue = driverPayDueUsd(state, driver);
 
   function goOnline() {
     if (!navigator.geolocation) {
@@ -126,23 +128,11 @@ export default function DriverHomePage() {
         {!isAdmin && percentageMode && commissionDue > 0 && !driver.payment_waived ? (
           <Alert className="border-2 border-destructive">
             <AlertTitle className="text-xl">{dict.driver.commissionDue}</AlertTitle>
-            <AlertDescription className="text-lg">
+            <AlertDescription className="flex flex-col gap-3 text-lg">
               {fmt(dict.driver.commissionDueBody, {
                 amount: commissionDue.toFixed(2),
-                number: WHISH_NUMBER,
               })}
-              <div className="mt-3">
-                <Button
-                  size="lg"
-                  className="touch-target"
-                  onClick={() => {
-                    requestPay(user.id, { kind: "commission", amount: commissionDue });
-                    toast.success(dict.driver.paidLogged);
-                  }}
-                >
-                  {dict.driver.iPaid}
-                </Button>
-              </div>
+              <DriverWhishActions kind="commission" dueAmount={commissionDue} />
             </AlertDescription>
           </Alert>
         ) : null}
@@ -164,24 +154,23 @@ export default function DriverHomePage() {
           driver.subscription_status === "pending_payment") ? (
           <Alert className="border-2 border-destructive">
             <AlertTitle className="text-xl">{dict.driver.subscriptionNeeded}</AlertTitle>
-            <AlertDescription className="text-lg">
-              Pay via Whish to <strong>{WHISH_NUMBER}</strong>
-              {driver.subscription_status === "frozen"
-                ? ` (+ $${state.settings.freeze_penalty_usd} penalty)`
-                : ""}
-              . Then tap “I paid”.
-              <div className="mt-3">
-                <Button
-                  size="lg"
-                  className="touch-target"
-                  onClick={() => {
-                    requestPay(user.id, { kind: "subscription" });
-                    toast.success("Payment request logged — admin can confirm");
-                  }}
-                >
-                  I paid on Whish
-                </Button>
-              </div>
+            <AlertDescription className="flex flex-col gap-3 text-lg">
+              <p>
+                {fmt(dict.driver.subscriptionNeededBody, {
+                  amount: payDue.amount.toFixed(2),
+                })}
+              </p>
+              {driver.subscription_status === "frozen" ? (
+                <p>
+                  {fmt(dict.driver.freezePenaltyNote, {
+                    penalty: state.settings.freeze_penalty_usd.toFixed(2),
+                  })}
+                </p>
+              ) : null}
+              <DriverWhishActions
+                kind="subscription"
+                dueAmount={payDue.amount}
+              />
             </AlertDescription>
           </Alert>
         ) : null}
@@ -189,8 +178,16 @@ export default function DriverHomePage() {
         {!isAdmin && !percentageMode && driver.subscription_status === "grace" ? (
           <Alert className="border-2 bg-muted">
             <AlertTitle className="text-xl">{dict.driver.gracePeriod}</AlertTitle>
-            <AlertDescription className="text-lg">
-              Renew soon or your account freezes after {state.settings.grace_days} days.
+            <AlertDescription className="flex flex-col gap-3 text-lg">
+              <p>
+                {fmt(dict.driver.graceRenewBody, {
+                  days: state.settings.grace_days,
+                })}
+              </p>
+              <DriverWhishActions
+                kind="subscription"
+                dueAmount={payDue.amount}
+              />
             </AlertDescription>
           </Alert>
         ) : null}

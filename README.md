@@ -48,10 +48,10 @@ The login screen also lists a short subset of these **demo-only** accounts.
 
 - **Next.js 16** App Router, React 19, Tailwind CSS, shadcn/ui
 - **npm workspaces** monorepo: `apps/*` and `packages/*`
-- **`@direct/shared`**: roles, dual-currency fares (USD / LBP), Zod schemas, ETA helpers
+- **`@direct/shared`**: roles, dual-currency fares (USD / LBP), ETA helpers, [driver payment rules](packages/shared/src/payment-rules.md)
 - **Supabase**: SQL migrations, row-level security, and RPCs such as `claim_order` under `supabase/migrations`
 - Optional **Google Maps** when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set
-- **Whish Pay** server routes when `WHISH_*` credentials are present
+- **Whish Pay** merchant collect when `WHISH_*` credentials are present
 
 ## Repository structure
 
@@ -64,17 +64,31 @@ The login screen also lists a short subset of these **demo-only** accounts.
 
 ## Whish
 
-Drivers pay the company cut to Whish number **81848663**. In demo mode, the driver marks the payment and an admin confirms it under **Budget → Whish**.
+Drivers pay with **Whish Pay merchant collect**, not a freeform P2P transfer to a phone number. The same success-only rules apply to **subscription** and **commission** (percentage settle). Web and future Expo must import `@direct/shared` helpers — see [`packages/shared/src/payment-rules.md`](packages/shared/src/payment-rules.md).
 
-Set `WHISH_CHANNEL` and `WHISH_SECRET` when merchant credentials are ready. Those keys let the app start a collect request. Without them, the manual confirm path stays in place.
+1. The driver taps **Pay with Whish**. The server calls `POST /payment/whish` with `WHISH_CHANNEL` / `WHISH_SECRET` / `WHISH_WEBSITE_URL`.
+2. The driver completes payment on the Whish page (phone + OTP).
+3. The app polls `POST /payment/collect/status` by `externalId`. Unlock **only** when `collectStatus === "success"` (exact string) — opening the pay URL, leaving without paying, pending, failed, or unknown does not unlock.
+4. Redirects return to the driver dashboard; the callback only re-checks collect status. Callback / redirect alone is **never** payment proof. When `WHISH_WEBSITE_URL` is set, redirects use that origin (not the request `Host` / `X-Forwarded-*` headers).
 
-Admin → Settings switches the default plan between **subscription** (drivers keep delivery fees) and **percentage of order**.
+The company Whish number in Settings is contact/support info only. It is **not** used to verify payment.
+
+If `WHISH_CHANNEL` / `WHISH_SECRET` are unset, **Pay with Whish** tells the driver to pay manually and **I already paid** logs a pending tx for an admin to confirm in **Budget → Whish**.
+
+Copy `apps/web/.env.example` → `apps/web/.env.local` and fill `WHISH_*` to test against sandbox credentials. Collect amounts are capped at $10,000 so subscription + freeze penalty still fit.
+
+## Revenue modes
+
+Admin → Settings: **subscription** (default) or **percentage of order**.
+
+- **Subscription** — delivery fees stay with the driver. Access is a monthly Whish collect (plus freeze penalty when frozen). Unpaid / frozen drivers cannot claim or go online until collect status is `success` (or admin confirm / waiver).
+- **Percentage** — the company cut from each completed order accrues during the current Beirut work day (**07:00 → 07:00 Asia/Beirut**). At/after 07:00, yesterday’s cuts (plus any unpaid backlog) become **due now**. Today’s cuts stay accruing until the next 07:00. The driver pays that `dueNow` with the **same Whish collect → success-only unlock** to keep claiming orders and going online. There is no cron: `workDayStart()` is evaluated on every claim / go-online / payment check.
 
 ## Phase 2 mobile
 
 `apps/mobile` is a README placeholder. There is no Expo project, `package.json`, or native code in this repository.
 
-The planned native app will reuse the same Supabase database, design tokens, and client / business / driver / admin flows, plus native push and background location. Do not treat this folder as a runnable app.
+The planned native app will reuse the same Supabase database, design tokens, client / business / driver / admin flows, plus native push and background location. Driver pay/unlock must follow the shared payment rules above — see `apps/mobile/README.md`. Do not treat this folder as a runnable app.
 
 ## How to run
 

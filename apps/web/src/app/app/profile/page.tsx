@@ -254,7 +254,7 @@ export default function ProfilePage() {
                       value: "subscription" as const,
                       title: dict.profile.payPlanSubscription,
                       desc: fmt(dict.profile.payPlanSubscriptionDesc, {
-                        price: state.settings.subscription_price_usd,
+                        price: `$${state.settings.subscription_price_usd}`,
                       }),
                     },
                     {
