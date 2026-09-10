@@ -1997,27 +1997,6 @@ export function addDriver(
   };
 }
 
-export function removeDriver(
-  state: DemoState,
-  driverId: string,
-): { state: DemoState; error?: string } {
-  const hasActive = state.orders.some(
-    (o) =>
-      (o.assigned_driver_id === driverId || o.long_distance_driver_id === driverId) &&
-      !["completed", "cancelled", "disputed"].includes(o.status),
-  );
-  if (hasActive) return { state, error: "This driver has an active delivery" };
-  // Keep the profile so order history still shows the name.
-  return {
-    state: {
-      ...state,
-      drivers: state.drivers.filter((d) => d.id !== driverId),
-      locations: state.locations.filter((l) => l.driver_id !== driverId),
-      sessionUserId: state.sessionUserId === driverId ? null : state.sessionUserId,
-    },
-  };
-}
-
 export type DriverAccountAction = "freeze" | "unfreeze" | "ban" | "unban";
 
 export function setDriverAccountAction(
