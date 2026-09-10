@@ -12,7 +12,7 @@ import {
   useMapsAvailable,
 } from "@/components/delivery-map";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
@@ -38,8 +38,7 @@ function BusinessesContent() {
 
   const businesses = state.profiles.filter((p) => p.role === "business");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected =
-    businesses.find((b) => b.id === selectedId) ?? businesses[0] ?? null;
+  const selected = businesses.find((b) => b.id === selectedId) ?? null;
 
   const [address, setAddress] = useState("");
   const [pin, setPin] = useState(DEFAULT_PIN);
@@ -120,107 +119,109 @@ function BusinessesContent() {
             <div className="grid gap-3">
               {businesses.map((b) => {
                 const costs = withBusinessOrderCosts(b);
+                const open = selectedId === b.id;
                 return (
-                  <button
+                  <div
                     key={b.id}
-                    type="button"
-                    onClick={() => setSelectedId(b.id)}
-                    className={`touch-target rounded-xl border-2 p-4 text-start transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
-                      selected?.id === b.id
+                    className={`rounded-xl border-2 transition-colors ${
+                      open
                         ? "border-foreground bg-muted"
                         : "border-border hover:bg-muted/60"
                     }`}
                   >
-                    <p className="text-lg font-semibold">{b.business_name || b.full_name}</p>
-                    <p className="text-base text-muted-foreground">
-                      {b.business_address?.trim()
-                        ? locationLabel(b.business_address, b.business_lat, b.business_lng)
-                        : dict.auth.pinRequired}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {formatDeliveryCash(costs.order_min_usd, costs.order_min_lbp)} –{" "}
-                      {formatDeliveryCash(costs.order_max_usd, costs.order_max_lbp)}
-                    </p>
-                  </button>
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      onClick={() => setSelectedId((id) => (id === b.id ? null : b.id))}
+                      className="touch-target w-full p-4 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    >
+                      <p className="text-lg font-semibold">{b.business_name || b.full_name}</p>
+                      <p className="text-base text-muted-foreground">
+                        {b.business_address?.trim()
+                          ? locationLabel(b.business_address, b.business_lat, b.business_lng)
+                          : dict.auth.pinRequired}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {formatDeliveryCash(costs.order_min_usd, costs.order_min_lbp)} –{" "}
+                        {formatDeliveryCash(costs.order_max_usd, costs.order_max_lbp)}
+                      </p>
+                    </button>
+                    {open && selected ? (
+                      <div className="flex flex-col gap-4 border-t p-4">
+                        <div>
+                          <h2 className="text-2xl font-semibold">
+                            <Store className="me-2 inline size-6" />
+                            {dict.admin.shopLocation}
+                          </h2>
+                        </div>
+                        <form onSubmit={onSaveLocation} className="flex flex-col gap-4">
+                          <div className="flex flex-col gap-2">
+                            <Label htmlFor="biz-address">{dict.admin.address}</Label>
+                            {mapsAvailable ? (
+                              <PlaceSearch
+                                placeholder={dict.order.searchPlace}
+                                className="h-11"
+                                onSelect={(place) => {
+                                  setAddress(place.address);
+                                  setPin({ lat: place.lat, lng: place.lng });
+                                }}
+                              />
+                            ) : null}
+                            <Input
+                              id="biz-address"
+                              className="h-11"
+                              value={address}
+                              onChange={(e) => setAddress(e.target.value)}
+                              placeholder={dict.admin.address}
+                              required={!mapsAvailable}
+                            />
+                          </div>
+                          <Button type="submit" size="lg" className="touch-target w-fit rounded-full px-6">
+                            {dict.admin.setLocation}
+                          </Button>
+                        </form>
+                        <DeliveryMap
+                          standalone={false}
+                          showLegend={false}
+                          height="260px"
+                          markers={[
+                            {
+                              id: selected.id,
+                              lat: pin.lat,
+                              lng: pin.lng,
+                              label: selected.business_name || selected.full_name,
+                              place: address,
+                              kind: "pickup",
+                            },
+                          ]}
+                          onMapClick={async (lat, lng) => {
+                            setPin({ lat, lng });
+                            setAddress(await reverseGeocode(lat, lng));
+                          }}
+                          routeHint={dict.admin.shopPinHint}
+                        />
+                        <div className="border-t pt-4">
+                          <div className="mb-3 flex items-center gap-2">
+                            <CircleDollarSign className="size-5 text-muted-foreground" />
+                            <h3 className="text-xl font-semibold">{dict.admin.orderCostsTitle}</h3>
+                          </div>
+                          <p className="mb-4 text-base text-muted-foreground">{dict.admin.orderCostsBody}</p>
+                          <form onSubmit={onSaveCosts} className="grid gap-4 sm:grid-cols-2">
+                            <CostField id="min-usd" label={dict.admin.minUsd} value={minUsd} onChange={setMinUsd} />
+                            <CostField id="max-usd" label={dict.admin.maxUsd} value={maxUsd} onChange={setMaxUsd} />
+                            <CostField id="min-lbp" label={dict.admin.minLbp} value={minLbp} onChange={setMinLbp} step="1000" />
+                            <CostField id="max-lbp" label={dict.admin.maxLbp} value={maxLbp} onChange={setMaxLbp} step="1000" />
+                            <Button type="submit" size="lg" className="touch-target w-fit rounded-full px-6 sm:col-span-2">
+                              {dict.admin.saveCosts}
+                            </Button>
+                          </form>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>
-
-            {selected ? (
-              <Card className="border-2">
-                <CardHeader>
-                  <CardTitle className="text-2xl">
-                    <Store className="me-2 inline size-6" />
-                    {dict.admin.shopLocation}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                  <form onSubmit={onSaveLocation} className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="biz-address">{dict.admin.address}</Label>
-                      {mapsAvailable ? (
-                        <PlaceSearch
-                          placeholder={dict.order.searchPlace}
-                          className="h-11"
-                          onSelect={(place) => {
-                            setAddress(place.address);
-                            setPin({ lat: place.lat, lng: place.lng });
-                          }}
-                        />
-                      ) : null}
-                      <Input
-                        id="biz-address"
-                        className="h-11"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                        placeholder={dict.admin.address}
-                        required={!mapsAvailable}
-                      />
-                    </div>
-                    <Button type="submit" size="lg" className="touch-target w-fit rounded-full px-6">
-                      {dict.admin.setLocation}
-                    </Button>
-                  </form>
-                  <DeliveryMap
-                    standalone={false}
-                    height="260px"
-                    markers={[
-                      {
-                        id: selected.id,
-                        lat: pin.lat,
-                        lng: pin.lng,
-                        label: selected.business_name || selected.full_name,
-                        place: address,
-                        kind: "pickup",
-                      },
-                    ]}
-                    onMapClick={async (lat, lng) => {
-                      setPin({ lat, lng });
-                      setAddress(await reverseGeocode(lat, lng));
-                    }}
-                    routeHint={dict.admin.shopPinHint}
-                  />
-
-                  {/* Order Costs */}
-                  <div className="border-t pt-4">
-                    <div className="mb-3 flex items-center gap-2">
-                      <CircleDollarSign className="size-5 text-muted-foreground" />
-                      <h3 className="text-xl font-semibold">{dict.admin.orderCostsTitle}</h3>
-                    </div>
-                    <p className="mb-4 text-base text-muted-foreground">{dict.admin.orderCostsBody}</p>
-                    <form onSubmit={onSaveCosts} className="grid gap-4 sm:grid-cols-2">
-                      <CostField id="min-usd" label={dict.admin.minUsd} value={minUsd} onChange={setMinUsd} />
-                      <CostField id="max-usd" label={dict.admin.maxUsd} value={maxUsd} onChange={setMaxUsd} />
-                      <CostField id="min-lbp" label={dict.admin.minLbp} value={minLbp} onChange={setMinLbp} step="1000" />
-                      <CostField id="max-lbp" label={dict.admin.maxLbp} value={maxLbp} onChange={setMaxLbp} step="1000" />
-                      <Button type="submit" size="lg" className="touch-target w-fit rounded-full px-6 sm:col-span-2">
-                        {dict.admin.saveCosts}
-                      </Button>
-                    </form>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : null}
           </>
         )}
       </div>

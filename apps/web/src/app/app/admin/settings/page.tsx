@@ -164,47 +164,39 @@ export default function AdminSettingsPage() {
             </div>
 
             <div>
-              <p className="mb-3 text-lg font-semibold">Service multipliers</p>
+              <p className="mb-3 text-lg font-semibold">Fare factor and dispatch</p>
               <p className="mb-4 text-base text-muted-foreground">
-                Applied on top of the distance fare. Fast delivery uses 1. Private and
-                trusted trips can be higher.
+                Price uses driving distance from pickup to drop-off. Nearby drivers
+                start in a 2 km ring; the ring grows by 1.5 until someone is in range.
+                Unaccepted offers are sent again after one minute, including drivers
+                who declined.
               </p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field
-                  label="Fast / normal ×"
+                  label="Global fare ×"
                   value={s.multiplier_normal}
                   onChange={(v) => num("multiplier_normal", v)}
                 />
                 <Field
-                  label="Long distance ×"
-                  value={s.multiplier_long_distance}
-                  onChange={(v) => num("multiplier_long_distance", v)}
+                  label="First search radius (km)"
+                  value={s.dispatch_initial_radius_km}
+                  onChange={(v) => num("dispatch_initial_radius_km", v)}
                 />
                 <Field
-                  label="Trusted ×"
-                  value={s.multiplier_trusted}
-                  onChange={(v) => num("multiplier_trusted", v)}
+                  label="Radius growth ×"
+                  value={s.dispatch_radius_growth}
+                  onChange={(v) => num("dispatch_radius_growth", v)}
                 />
                 <Field
-                  label="Private ×"
-                  value={s.multiplier_private}
-                  onChange={(v) => num("multiplier_private", v)}
-                />
-                <Field
-                  label="Owner ×"
-                  value={s.multiplier_owner}
-                  onChange={(v) => num("multiplier_owner", v)}
-                />
-                <Field
-                  label="Nearby radius km"
-                  value={s.nearby_radius_km}
-                  onChange={(v) => num("nearby_radius_km", v)}
+                  label="Re-offer after (sec)"
+                  value={s.dispatch_offer_timeout_sec}
+                  onChange={(v) => num("dispatch_offer_timeout_sec", v)}
                 />
               </div>
             </div>
 
             <div className="rounded-xl bg-muted p-4">
-              <p className="text-lg font-semibold">Fast delivery preview</p>
+              <p className="text-lg font-semibold">Distance fare preview</p>
               <ul className="mt-3 flex flex-col gap-2 text-base">
                 {PREVIEW_KM.map((km) => {
                   const q = quoteDeliveryPrice("normal", s, km, PREVIEW_AT);

@@ -30,21 +30,8 @@ export function orderStatusLabel(status: OrderStatus | string, dict: Dictionary)
   return dict.orderStatus[status as OrderStatus] ?? status.replaceAll("_", " ");
 }
 
-export function orderTypeLabel(type: OrderType, dict: Dictionary): string {
-  switch (type) {
-    case "normal":
-      return dict.order.typeFast;
-    case "long_distance":
-      return dict.order.typeLong;
-    case "trusted":
-      return dict.order.typeTrusted;
-    case "private":
-      return dict.order.typePrivate;
-    case "owner":
-      return dict.order.typeOwner;
-    default:
-      return type;
-  }
+export function orderTypeLabel(_type: OrderType, dict: Dictionary): string {
+  return dict.order.delivery;
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {

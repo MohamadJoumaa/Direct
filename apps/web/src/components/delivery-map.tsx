@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { DRIVER_TYPE_LABELS, type DriverType } from "@direct/shared";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -49,6 +48,8 @@ type Props = {
   onMapClick?: (lat: number, lng: number) => void;
   /** Set false when an ancestor already renders <MapsProvider>. */
   standalone?: boolean;
+  /** Marker summary list under the map. Default true. */
+  showLegend?: boolean;
 };
 
 function markerKindLabel(kind: MapMarker["kind"], dict: Dictionary): string {
@@ -84,6 +85,7 @@ function DeliveryMapCard({
   height = "320px",
   route,
   onMapClick,
+  showLegend = true,
 }: Omit<Props, "standalone">) {
   const { dict } = useI18n();
   const mapsAvailable = useMapsAvailable();
@@ -112,30 +114,27 @@ function DeliveryMapCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {inner}
-        <ul className="flex flex-col gap-2">
-          {markers.map((m) => (
-            <li
-              key={m.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-base"
-            >
-              <span className="font-medium">{m.label}</span>
-              <div className="flex items-center gap-2">
-                {m.role ? (
-                  <Badge variant="secondary">
-                    {DRIVER_TYPE_LABELS[m.role as DriverType] ?? m.role}
-                  </Badge>
-                ) : null}
-                <Badge variant="outline">{markerKindLabel(m.kind, dict)}</Badge>
-                <span className="text-sm text-muted-foreground">
-                  {locationLabel(m.place, m.lat, m.lng)}
-                </span>
-              </div>
-            </li>
-          ))}
-          {markers.length === 0 ? (
-            <li className="text-base text-muted-foreground">—</li>
-          ) : null}
-        </ul>
+        {showLegend ? (
+          <ul className="flex flex-col gap-2">
+            {markers.map((m) => (
+              <li
+                key={m.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-base"
+              >
+                <span className="font-medium">{m.label}</span>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{markerKindLabel(m.kind, dict)}</Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {locationLabel(m.place, m.lat, m.lng)}
+                  </span>
+                </div>
+              </li>
+            ))}
+            {markers.length === 0 ? (
+              <li className="text-base text-muted-foreground">—</li>
+            ) : null}
+          </ul>
+        ) : null}
       </CardContent>
     </Card>
   );

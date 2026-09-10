@@ -1,8 +1,17 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import type { CompanySettings, DriverType, OrderType, UserRole } from "@direct/shared";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { CompanySettings, DriverType, UserRole } from "@direct/shared";
 import * as demo from "@/lib/demo-store";
+import { measureDriverLegs, measureRouteKm } from "@/lib/route-distance";
 
 type StoreContextValue = {
   ready: boolean;
@@ -33,9 +42,8 @@ type StoreContextValue = {
       dropoff_lat: number;
       dropoff_lng: number;
       product_description: string;
-      order_type: OrderType;
     },
-  ) => { error?: string; orderNumber?: number };
+  ) => Promise<{ error?: string; orderNumber?: number }>;
   claimOrder: (orderId: string, driverId: string) => string | undefined;
   declineOffer: (orderId: string, driverId: string) => string | undefined;
   advanceOrder: (
@@ -99,7 +107,7 @@ type StoreContextValue = {
     email: string;
     phone: string;
     password: string;
-    driver_type: DriverType;
+    driver_type?: DriverType;
   }) => string | undefined;
   removeDriver: (driverId: string) => string | undefined;
   setDriverAccountAction: (
@@ -121,28 +129,68 @@ type StoreContextValue = {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
+async function measurePendingLegs(current: demo.DemoState) {
+  const pending = demo.pendingDispatchOrders(current);
+  const points = demo.dispatchDriverPoints(current);
+  const legsByOrder = new Map<string, Awaited<ReturnType<typeof measureDriverLegs>>>();
+  await Promise.all(
+    pending.map(async (order) => {
+      const legs = await measureDriverLegs(
+        points,
+        { lat: order.pickup_lat, lng: order.pickup_lng },
+        { lat: order.dropoff_lat, lng: order.dropoff_lng },
+      );
+      legsByOrder.set(order.id, legs);
+    }),
+  );
+  return legsByOrder;
+}
+
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<demo.DemoState>(demo.initialState);
   const [ready, setReady] = useState(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const commit = useCallback((next: demo.DemoState) => {
+    demo.saveState(next);
+    stateRef.current = next;
+    setState(next);
+  }, []);
+
+  const runDispatchPass = useCallback(async () => {
+    const current = stateRef.current;
+    if (demo.pendingDispatchOrders(current).length === 0) return;
+    const legsByOrder = await measurePendingLegs(current);
+    const next = demo.tickDispatch(stateRef.current, legsByOrder);
+    if (next === stateRef.current) return;
+    commit(next);
+  }, [commit]);
 
   useEffect(() => {
     const loaded = demo.applySubscriptionFreeze(demo.loadState());
     demo.saveState(loaded);
+    stateRef.current = loaded;
     setState(loaded);
     setReady(true);
 
     function onStorage(e: StorageEvent) {
       if (e.key !== demo.STORAGE_KEY || !e.newValue) return;
-      setState(demo.loadState());
+      const next = demo.loadState();
+      stateRef.current = next;
+      setState(next);
     }
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const commit = useCallback((next: demo.DemoState) => {
-    demo.saveState(next);
-    setState(next);
-  }, []);
+  useEffect(() => {
+    if (!ready) return;
+    const id = window.setInterval(() => {
+      void runDispatchPass();
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [ready, runDispatchPass]);
 
   const value = useMemo<StoreContextValue>(
     () => ({
@@ -161,11 +209,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       logout: () => commit({ ...state, sessionUserId: null, viewingAs: null }),
       setViewingAs: (role) => commit({ ...state, viewingAs: role }),
-      createOrder: (clientId, input) => {
-        const r = demo.createOrder(state, clientId, input);
-        if (r.error) return { error: r.error };
-        commit(r.state);
-        return { orderNumber: r.order?.order_number };
+      createOrder: async (clientId, input) => {
+        const distanceKm = await measureRouteKm(
+          { lat: input.pickup_lat, lng: input.pickup_lng },
+          { lat: input.dropoff_lat, lng: input.dropoff_lng },
+        );
+        const r = demo.createOrder(stateRef.current, clientId, { ...input, distanceKm });
+        if (r.error || !r.order) return { error: r.error };
+        const legs = await measureDriverLegs(
+          demo.dispatchDriverPoints(r.state),
+          { lat: r.order.pickup_lat, lng: r.order.pickup_lng },
+          { lat: r.order.dropoff_lat, lng: r.order.dropoff_lng },
+        );
+        commit(demo.reconcileOrderDispatch(r.state, r.order.id, legs));
+        return { orderNumber: r.order.order_number };
       },
       claimOrder: (orderId, driverId) => {
         const r = demo.claimOrder(state, orderId, driverId);
@@ -204,6 +261,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const r = demo.setOnline(state, driverId, online, lat, lng);
         if (r.error) return r.error;
         commit(r.state);
+        if (online) void runDispatchPass();
       },
       requestPay: (driverId, opts) => commit(demo.requestSubscriptionPayment(state, driverId, opts)),
       confirmWhish: (txId) => commit(demo.confirmWhish(state, txId)),
@@ -277,7 +335,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       removeWarehouseProduct: (productId) =>
         commit(demo.removeWarehouseProduct(state, productId)),
     }),
-    [ready, state, commit],
+    [ready, state, commit, runDispatchPass],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

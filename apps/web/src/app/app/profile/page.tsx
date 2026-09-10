@@ -126,7 +126,6 @@ export default function ProfilePage() {
               <p className="text-base capitalize text-muted-foreground">{user.role}</p>
               {driver ? (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Badge className="capitalize">{driver.driver_type.replaceAll("_", " ")}</Badge>
                   <Badge variant="secondary" className="gap-1">
                     <Star className="size-3.5 fill-current" />
                     {driver.rating_avg.toFixed(1)} ({driver.rating_count} {dict.profile.reviews})

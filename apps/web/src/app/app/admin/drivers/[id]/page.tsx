@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Phone, ShieldCheck, Star } from "lucide-react";
-import { DRIVER_TYPE_LABELS, formatDeliveryCash } from "@direct/shared";
+import { formatDeliveryCash } from "@direct/shared";
 import { DocumentAttachment } from "@/components/document-attachment";
 import { ProfilePhoto } from "@/components/profile-photo";
 import { Badge } from "@/components/ui/badge";
@@ -93,7 +93,6 @@ export default function AdminDriverProfilePage() {
                 {profile.phone}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge className="capitalize">{DRIVER_TYPE_LABELS[driver.driver_type]}</Badge>
                 <Badge variant="secondary" className="gap-1">
                   <Star className="size-3.5 fill-current" />
                   {driver.rating_avg.toFixed(1)} ({driver.rating_count} {dict.profile.reviews})

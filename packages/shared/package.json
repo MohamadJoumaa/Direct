@@ -9,6 +9,6 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test src/payment-rules.test.ts"
+    "test": "node --experimental-strip-types --test src/payment-rules.test.ts src/dispatch.test.ts"
   }
 }

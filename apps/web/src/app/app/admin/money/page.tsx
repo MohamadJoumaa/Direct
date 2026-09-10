@@ -147,7 +147,7 @@ export default function AdminMoneyPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Whish transactions</CardTitle>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>

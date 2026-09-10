@@ -3,10 +3,8 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ShieldCheck, UserPlus } from "lucide-react";
-import { DRIVER_TYPE_LABELS, PUBLIC_DRIVER_TYPES, type DriverType } from "@direct/shared";
 import { LinkButton } from "@/components/link-button";
 import { ProfilePhoto } from "@/components/profile-photo";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,14 +18,6 @@ import {
 } from "@/lib/demo-store";
 import { payMethodLabel, ReviewStatusBadge } from "./account-status";
 import { DriverAccountActions } from "./driver-account-actions";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -49,7 +39,6 @@ export default function AdminDriversPage() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [driverType, setDriverType] = useState<DriverType>("fast");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | DriverReviewStatus>("all");
 
@@ -81,7 +70,6 @@ export default function AdminDriversPage() {
       phone: phone.trim(),
       email: email.trim(),
       password,
-      driver_type: driverType,
     });
     if (err) {
       toast.error(err);
@@ -148,30 +136,6 @@ export default function AdminDriversPage() {
                   required
                 />
               </div>
-              <div className="flex flex-col gap-2">
-                <Label>{dict.auth.driverType}</Label>
-                <Select
-                  value={driverType}
-                  onValueChange={(v) => setDriverType(v as DriverType)}
-                  items={PUBLIC_DRIVER_TYPES.map((t) => ({
-                    label: DRIVER_TYPE_LABELS[t],
-                    value: t,
-                  }))}
-                >
-                  <SelectTrigger className="h-11 w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {PUBLIC_DRIVER_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {DRIVER_TYPE_LABELS[t]}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="flex items-end">
                 <Button type="submit" size="lg" className="touch-target rounded-full px-6">
                   {dict.common.add}
@@ -219,13 +183,11 @@ export default function AdminDriversPage() {
                 </Button>
               ))}
             </div>
-            <div className="overflow-x-auto">
-              <Table>
+            <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>{dict.common.name}</TableHead>
                     <TableHead>{dict.common.phone}</TableHead>
-                    <TableHead>{dict.common.type}</TableHead>
                     <TableHead>{dict.admin.companyPlan}</TableHead>
                     <TableHead>{dict.admin.paymentMethod}</TableHead>
                     <TableHead>{dict.admin.accountStatus}</TableHead>
@@ -236,7 +198,7 @@ export default function AdminDriversPage() {
                 <TableBody>
                   {filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                         {dict.admin.noDriversMatch}
                       </TableCell>
                     </TableRow>
@@ -264,9 +226,6 @@ export default function AdminDriversPage() {
                             </span>
                           </TableCell>
                           <TableCell>{p?.phone}</TableCell>
-                          <TableCell>
-                            <Badge>{DRIVER_TYPE_LABELS[d.driver_type]}</Badge>
-                          </TableCell>
                           <TableCell>
                             {driverCompanyPayMode(d, state.settings) === "percentage"
                               ? dict.admin.planPercentage
@@ -305,7 +264,6 @@ export default function AdminDriversPage() {
                   )}
                 </TableBody>
               </Table>
-            </div>
           </CardContent>
         </Card>
 

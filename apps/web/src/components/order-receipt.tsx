@@ -5,7 +5,7 @@ import { Clock, MapPin, Package } from "lucide-react";
 import type { Order, Warehouse } from "@/lib/demo-store";
 import { formatOrderNumber } from "@/lib/demo-store";
 import { Badge } from "@/components/ui/badge";
-import { orderStatusLabel, orderTypeLabel, useI18n } from "@/lib/i18n";
+import { orderStatusLabel, useI18n } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
 import { cn } from "@/lib/utils";
 
@@ -70,7 +70,6 @@ export function OrderReceipt({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge>{orderTypeLabel(order.order_type, dict)}</Badge>
           {order.status ? (
             <Badge variant="outline" className="capitalize">
               {orderStatusLabel(order.status, dict)}

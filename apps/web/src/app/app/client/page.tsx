@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
-import { orderStatusLabel, orderTypeLabel, useI18n } from "@/lib/i18n";
+import { orderStatusLabel, useI18n } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
 import { activeDriverId, shortProduct, trackingRoute } from "@/lib/maps-nav";
 import { OrderSearchField, useOrderSearch } from "@/components/order-search";
@@ -140,7 +140,6 @@ export default function ClientHomePage() {
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <Badge className="text-sm">{orderTypeLabel(o.order_type, dict)}</Badge>
                     <Badge variant="outline" className="text-sm capitalize">
                       {orderStatusLabel(o.status, dict)}
                     </Badge>

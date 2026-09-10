@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { DRIVER_TYPE_LABELS } from "@direct/shared";
-import { availableOrdersForDriver, driverCommissionTotals, driverCompanyPayMode, driverPayDueUsd, formatOrderNumber } from "@/lib/demo-store";
+import { availableOrdersForDriver, driverCommissionTotals, driverCompanyPayMode, driverPayDueUsd, formatOrderNumber, offerForDriver } from "@/lib/demo-store";
 import { LinkButton } from "@/components/link-button";
 import { DriverWhishActions } from "@/components/driver-whish-actions";
 import { DeliveryMap } from "@/components/delivery-map";
@@ -13,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
-import { orderStatusLabel, orderTypeLabel, useI18n, fmt } from "@/lib/i18n";
+import { orderStatusLabel, useI18n, fmt } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
 import { nextNavStop, openDrivingDirections } from "@/lib/maps-nav";
 import { OrderSearchField, useOrderSearch } from "@/components/order-search";
@@ -209,7 +208,6 @@ export default function DriverHomePage() {
               {dict.driver.goOnlineLocation}
             </Button>
           )}
-          <Badge className="text-sm">{DRIVER_TYPE_LABELS[driver.driver_type]}</Badge>
         </div>
         {locError ? <p className="text-base text-muted-foreground">{locError}</p> : null}
 
@@ -234,7 +232,7 @@ export default function DriverHomePage() {
                     </p>
                     <CardTitle className="text-xl">{o.product_description}</CardTitle>
                   </div>
-                  <Badge>{orderTypeLabel(o.order_type, dict)}</Badge>
+                  <Badge variant="outline">{orderStatusLabel(o.status, dict)}</Badge>
                 </CardHeader>
                 <CardContent className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-lg capitalize">{orderStatusLabel(o.status, dict)} · ${o.driver_cut_usd.toFixed(2)}</p>
@@ -289,9 +287,20 @@ export default function DriverHomePage() {
                     {locationLabel(o.pickup_address, o.pickup_lat, o.pickup_lng)} →{" "}
                     {locationLabel(o.dropoff_address, o.dropoff_lat, o.dropoff_lng)}
                   </p>
-                  <p>
-                    {orderTypeLabel(o.order_type, dict)} · ${o.driver_cut_usd.toFixed(2)}
-                  </p>
+                  <p>${o.driver_cut_usd.toFixed(2)}</p>
+                  {user
+                    ? (() => {
+                        const offer = offerForDriver(state, o.id, user.id);
+                        if (!offer) return null;
+                        return (
+                          <p className="text-base text-muted-foreground">
+                            {fmt(dict.driver.toPickup, { km: offer.to_pickup_km.toFixed(1) })}
+                            {" · "}
+                            {fmt(dict.driver.toDropoff, { km: offer.to_dropoff_km.toFixed(1) })}
+                          </p>
+                        );
+                      })()
+                    : null}
                   <div className="flex flex-wrap gap-2">
                     <Button
                       size="lg"
@@ -328,14 +337,12 @@ export default function DriverHomePage() {
           markers={state.locations
             .filter((l) => state.drivers.find((d) => d.id === l.driver_id)?.is_online)
             .map((l) => {
-              const d = state.drivers.find((x) => x.id === l.driver_id)!;
               const isYou = l.driver_id === user.id;
               return {
                 id: l.driver_id,
                 lat: l.lat,
                 lng: l.lng,
                 label: isYou ? dict.common.you : dict.common.nearbyDriver,
-                role: d.driver_type,
                 kind: "driver" as const,
               };
             })}

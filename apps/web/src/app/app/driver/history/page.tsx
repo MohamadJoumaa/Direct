@@ -1,7 +1,6 @@
 "use client";
 
 import { LinkButton } from "@/components/link-button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -14,7 +13,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { formatOrderNumber, publicClientInfo } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
-import { orderStatusLabel, orderTypeLabel, useI18n } from "@/lib/i18n";
+import { orderStatusLabel, useI18n } from "@/lib/i18n";
 import { OrderSearchField, useOrderSearch } from "@/components/order-search";
 import { orderPartyExtras } from "@/lib/order-search";
 
@@ -57,7 +56,6 @@ export default function DriverHistoryPage() {
                   <TableHead className="text-base">{dict.common.orderNumber}</TableHead>
                   <TableHead className="text-base">{dict.common.item}</TableHead>
                   <TableHead className="text-base">{dict.common.client}</TableHead>
-                  <TableHead className="text-base">{dict.common.type}</TableHead>
                   <TableHead className="text-base">{dict.driver.yourPay}</TableHead>
                   <TableHead className="text-base">{dict.common.status}</TableHead>
                   <TableHead className="text-base">
@@ -79,9 +77,6 @@ export default function DriverHistoryPage() {
                         {client?.phone ? (
                           <div className="text-muted-foreground">{client.phone}</div>
                         ) : null}
-                      </TableCell>
-                      <TableCell>
-                        <Badge>{orderTypeLabel(o.order_type, dict)}</Badge>
                       </TableCell>
                       <TableCell className="text-base">
                         ${o.driver_cut_usd.toFixed(2)}

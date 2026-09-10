@@ -82,6 +82,9 @@ export const DEFAULT_SETTINGS = {
   multiplier_owner: 1.2,
   multiplier_medical: 2,
   nearby_radius_km: 15,
+  dispatch_initial_radius_km: 2,
+  dispatch_radius_growth: 1.5,
+  dispatch_offer_timeout_sec: 60,
 } as const;
 
 export type CompanySettings = {
@@ -106,6 +109,9 @@ export type CompanySettings = {
   multiplier_owner: number;
   multiplier_medical: number;
   nearby_radius_km: number;
+  dispatch_initial_radius_km: number;
+  dispatch_radius_growth: number;
+  dispatch_offer_timeout_sec: number;
 };
 
 export function roundUsd(n: number): number {
@@ -306,13 +312,11 @@ export function splitRevenue(
   return { company_cut: 0, driver_cut: deliveryFee };
 }
 
-/** Fast drivers: one active order. Long-distance: can take more. */
+/** Every driver can hold one active order. */
 export function canAcceptAnotherOrder(
-  driverType: DriverType,
+  _driverType: DriverType | undefined,
   activeCount: number,
 ): boolean {
-  if (driverType === "fast") return activeCount < 1;
-  if (driverType === "long_distance") return true;
   return activeCount < 1;
 }
 
@@ -351,17 +355,24 @@ export function haversineKm(
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/** Rough ETA minutes from distance + type buffer. */
+/** Rough ETA minutes from driving distance (city speed + buffer). */
 export function estimateEtaMinutes(
   distanceKm: number,
-  orderType: OrderType,
+  _orderType?: OrderType,
 ): number {
-  const speedKmh = orderType === "long_distance" ? 60 : 35;
-  const drive = (distanceKm / speedKmh) * 60;
-  const buffer =
-    orderType === "long_distance" ? 45 : orderType === "private" ? 15 : 10;
-  return Math.max(5, Math.round(drive + buffer));
+  const drive = (Math.max(0, distanceKm) / 35) * 60;
+  return Math.max(5, Math.round(drive + 10));
 }
+
+export {
+  DISPATCH_INITIAL_RADIUS_KM,
+  DISPATCH_RADIUS_GROWTH,
+  DISPATCH_OFFER_TIMEOUT_MS,
+  DISPATCH_MAX_EXPAND_STEPS,
+  expandDispatchRadius,
+  driversInsideRadius,
+  type DispatchRing,
+} from "./dispatch";
 
 export {
   WHISH_COLLECT_SUCCESS_STATUS,

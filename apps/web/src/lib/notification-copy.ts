@@ -6,6 +6,17 @@ export function notificationCopy(
   dict: Dictionary,
   orders: Order[],
 ): { title: string; body: string; href?: string } {
+  if (n.kind === "order_offered") {
+    const order = n.order_id ? orders.find((o) => o.id === n.order_id) : undefined;
+    const number = order ? formatOrderNumber(order.order_number) : "";
+    return {
+      title: dict.driver.orderOfferedTitle,
+      body: number
+        ? fmt(dict.driver.orderOfferedBody, { number })
+        : dict.driver.orderOfferedTitle,
+      href: n.order_id ? `/app/driver/orders/${n.order_id}` : "/app/driver",
+    };
+  }
   if (n.kind === "order_cancelled") {
     const order = n.order_id ? orders.find((o) => o.id === n.order_id) : undefined;
     const number = order ? formatOrderNumber(order.order_number) : "";

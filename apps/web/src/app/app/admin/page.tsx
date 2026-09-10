@@ -4,9 +4,8 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { formatDeliveryCash, ORDER_TYPE_LABELS } from "@direct/shared";
+import { formatDeliveryCash } from "@direct/shared";
 import { LinkButton } from "@/components/link-button";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -176,13 +175,12 @@ function OrdersTable({
         <CardTitle className="text-2xl">{title}</CardTitle>
         <OrderSearchField show={showSearch} value={query} onChange={setQuery} />
       </CardHeader>
-      <CardContent className="overflow-x-auto">
+      <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{headers.number}</TableHead>
               <TableHead>{headers.item}</TableHead>
-              <TableHead>{headers.type}</TableHead>
               <TableHead>{headers.driver}</TableHead>
               <TableHead>{headers.status}</TableHead>
               <TableHead>{headers.fee}</TableHead>
@@ -199,9 +197,6 @@ function OrdersTable({
                     {formatOrderNumber(o.order_number)}
                   </TableCell>
                   <TableCell className="text-base">{o.product_description}</TableCell>
-                  <TableCell>
-                    <Badge>{ORDER_TYPE_LABELS[o.order_type]}</Badge>
-                  </TableCell>
                   <TableCell className="text-base">
                     {driver?.full_name ?? "—"}
                     <br />

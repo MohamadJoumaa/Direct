@@ -6,12 +6,11 @@ import { toast } from "sonner";
 import { CircleDot, Square } from "lucide-react";
 import {
   formatDeliveryCash,
-  haversineKm,
   quoteDeliveryPrice,
   clampQuoteToBusinessCosts,
   withBusinessOrderCosts,
-  type OrderType,
 } from "@direct/shared";
+import { measureRouteKm } from "@/lib/route-distance";
 import {
   DeliveryMap,
   MapsProvider,
@@ -29,7 +28,6 @@ import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
 import { fmt, useI18n } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
-import { cn } from "@/lib/utils";
 
 const PRESETS = [
   {
@@ -85,7 +83,8 @@ function NewOrderContent() {
 
   const [step, setStep] = useState(1);
   const [product, setProduct] = useState("");
-  const [orderType, setOrderType] = useState<OrderType>("normal");
+  const [placing, setPlacing] = useState(false);
+  const [routeKm, setRouteKm] = useState<number | null>(null);
   const [pickup, setPickup] = useState<Point>({
     ...PRESETS[0].pickup,
     address: searchParams.get("pickup") ?? PRESETS[0].pickup.address,
@@ -112,28 +111,31 @@ function NewOrderContent() {
     }
   }, [user]);
 
-  const distanceKm = useMemo(
-    () => haversineKm(pickup.lat, pickup.lng, dropoff.lat, dropoff.lng),
-    [pickup.lat, pickup.lng, dropoff.lat, dropoff.lng],
-  );
+  useEffect(() => {
+    let cancelled = false;
+    setRouteKm(null);
+    void measureRouteKm(
+      { lat: pickup.lat, lng: pickup.lng },
+      { lat: dropoff.lat, lng: dropoff.lng },
+    ).then((km) => {
+      if (!cancelled) setRouteKm(km);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pickup.lat, pickup.lng, dropoff.lat, dropoff.lng]);
+
+  const distanceKm = routeKm;
   const quote = useMemo(() => {
-    const raw = quoteDeliveryPrice(orderType, state.settings, distanceKm);
+    if (distanceKm == null) return null;
+    const raw = quoteDeliveryPrice("normal", state.settings, distanceKm);
     if (user?.role !== "business") return raw;
     return clampQuoteToBusinessCosts(raw, withBusinessOrderCosts(user));
-  }, [orderType, state.settings, distanceKm, user]);
+  }, [state.settings, distanceKm, user]);
   const costCaps = user?.role === "business" ? withBusinessOrderCosts(user) : null;
 
-  const typeOptions: { value: OrderType; label: string; desc: string }[] = [
-    { value: "normal", label: dict.order.typeFast, desc: dict.order.typeFastDesc },
-    { value: "long_distance", label: dict.order.typeLong, desc: dict.order.typeLongDesc },
-    { value: "trusted", label: dict.order.typeTrusted, desc: dict.order.typeTrustedDesc },
-    { value: "private", label: dict.order.typePrivate, desc: dict.order.typePrivateDesc },
-    { value: "owner", label: dict.order.typeOwner, desc: dict.order.typeOwnerDesc },
-  ];
-  const selectedType = typeOptions.find((t) => t.value === orderType) ?? typeOptions[0];
-
   const nearby = state.drivers
-    .filter((d) => d.is_online && d.driver_type === "fast")
+    .filter((d) => d.is_online)
     .map((d) => {
       const loc = state.locations.find((l) => l.driver_id === d.id);
       if (!loc) return null;
@@ -142,7 +144,6 @@ function NewOrderContent() {
         lat: loc.lat,
         lng: loc.lng,
         label: dict.common.nearbyDriver,
-        role: d.driver_type,
         kind: "driver" as const,
       };
     })
@@ -151,7 +152,6 @@ function NewOrderContent() {
     lat: number;
     lng: number;
     label: string;
-    role: string;
     kind: "driver";
   }[];
 
@@ -165,13 +165,14 @@ function NewOrderContent() {
     setPinTarget("dropoff");
   }
 
-  function placeOrder() {
+  async function placeOrder() {
     if (!user) return;
     if (user.role === "business" && !shopReady) {
       toast.error(dict.order.missingShop);
       return;
     }
-    const result = createOrder(user.id, {
+    setPlacing(true);
+    const result = await createOrder(user.id, {
       pickup_address: pickup.address,
       pickup_lat: pickup.lat,
       pickup_lng: pickup.lng,
@@ -179,8 +180,8 @@ function NewOrderContent() {
       dropoff_lat: dropoff.lat,
       dropoff_lng: dropoff.lng,
       product_description: product,
-      order_type: orderType,
     });
+    setPlacing(false);
     if (result.error) {
       toast.error(result.error);
       return;
@@ -360,54 +361,34 @@ function NewOrderContent() {
                 <CardTitle className="text-2xl">{dict.order.typeTitle}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <nav
-                  className="flex gap-1 overflow-x-auto rounded-full bg-muted p-1"
-                  aria-label={dict.order.typeTitle}
-                >
-                  {typeOptions.map((t) => (
-                    <button
-                      key={t.value}
-                      type="button"
-                      aria-pressed={orderType === t.value}
-                      onClick={() => setOrderType(t.value)}
-                      className={cn(
-                        "touch-target flex-1 whitespace-nowrap rounded-full px-4 py-2 text-base font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                        orderType === t.value
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </nav>
-
                 <div className="rounded-xl bg-muted p-4">
-                  <p className="text-base font-medium">{selectedType.desc}</p>
-                  {orderType === "long_distance" ? (
-                    <p className="mt-1 text-sm text-muted-foreground">{dict.order.longTripNote}</p>
-                  ) : null}
-                  <p className="mt-3 text-xl">
-                    {dict.order.price}:{" "}
-                    <strong>{formatDeliveryCash(quote.totalUsd, quote.totalLbp)}</strong>
-                  </p>
-                  <p className="text-base text-muted-foreground">
-                    {dict.order.distance}: {distanceKm.toFixed(1)} {dict.common.km}
-                  </p>
-                  {quote.nightUsd > 0 ? (
-                    <p className="text-base text-muted-foreground">
-                      {fmt(dict.order.nightNote, { amount: quote.nightUsd.toFixed(2) })}
-                    </p>
-                  ) : null}
-                  <p className="text-base text-muted-foreground">{dict.order.cashNote}</p>
-                  {costCaps ? (
-                    <p className="mt-2 text-base text-muted-foreground">
-                      {fmt(dict.order.priceRange, {
-                        min: formatDeliveryCash(costCaps.order_min_usd, costCaps.order_min_lbp),
-                        max: formatDeliveryCash(costCaps.order_max_usd, costCaps.order_max_lbp),
-                      })}
-                    </p>
-                  ) : null}
+                  {quote == null || distanceKm == null ? (
+                    <p className="text-base text-muted-foreground">{dict.order.calculatingRoute}</p>
+                  ) : (
+                    <>
+                      <p className="text-xl">
+                        {dict.order.price}:{" "}
+                        <strong>{formatDeliveryCash(quote.totalUsd, quote.totalLbp)}</strong>
+                      </p>
+                      <p className="text-base text-muted-foreground">
+                        {dict.order.distance}: {distanceKm.toFixed(1)} {dict.common.km}
+                      </p>
+                      {quote.nightUsd > 0 ? (
+                        <p className="text-base text-muted-foreground">
+                          {fmt(dict.order.nightNote, { amount: quote.nightUsd.toFixed(2) })}
+                        </p>
+                      ) : null}
+                      <p className="text-base text-muted-foreground">{dict.order.cashNote}</p>
+                      {costCaps ? (
+                        <p className="mt-2 text-base text-muted-foreground">
+                          {fmt(dict.order.priceRange, {
+                            min: formatDeliveryCash(costCaps.order_min_usd, costCaps.order_min_lbp),
+                            max: formatDeliveryCash(costCaps.order_max_usd, costCaps.order_max_lbp),
+                          })}
+                        </p>
+                      ) : null}
+                    </>
+                  )}
                 </div>
 
                 <div className="flex gap-2">
@@ -423,6 +404,7 @@ function NewOrderContent() {
                     size="lg"
                     className="touch-target h-12 rounded-full px-6 text-base font-semibold"
                     onClick={() => setStep(4)}
+                    disabled={quote == null}
                   >
                     {dict.common.next}
                   </Button>
@@ -431,7 +413,7 @@ function NewOrderContent() {
             </Card>
           ) : null}
 
-          {step === 4 ? (
+          {step === 4 && quote != null && distanceKm != null ? (
             <OrderReceipt
               order={{
                 product_description: product,
@@ -441,7 +423,7 @@ function NewOrderContent() {
                 dropoff_address: dropoff.address,
                 dropoff_lat: dropoff.lat,
                 dropoff_lng: dropoff.lng,
-                order_type: orderType,
+                order_type: "normal",
               }}
               cashLabel={dict.common.cash}
               cashValue={formatDeliveryCash(quote.totalUsd, quote.totalLbp)}
@@ -480,7 +462,8 @@ function NewOrderContent() {
                   <Button
                     size="lg"
                     className="touch-target h-12 rounded-full px-6 text-base font-semibold"
-                    onClick={placeOrder}
+                    onClick={() => void placeOrder()}
+                    disabled={placing}
                   >
                     {dict.order.placeOrder}
                   </Button>

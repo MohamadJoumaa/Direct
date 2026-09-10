@@ -23,6 +23,7 @@ import {
   FileText,
 } from "lucide-react";
 import { ProfilePhoto } from "@/components/profile-photo";
+import { LinkButton } from "@/components/link-button";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -52,6 +53,7 @@ import {
 } from "@/components/ui/popover";
 
 const toastedCancelIds = new Set<string>();
+const toastedOfferIds = new Set<string>();
 
 function NotificationBell() {
   const { user } = useAuth();
@@ -124,6 +126,12 @@ function DriverCancelAlerts() {
           (n) => n.user_id === userId && n.kind === "order_cancelled" && !n.read,
         )
       : [];
+  const offers =
+    userId && effectiveRole === "driver"
+      ? state.notifications.filter(
+          (n) => n.user_id === userId && n.kind === "order_offered" && !n.read,
+        )
+      : [];
 
   useEffect(() => {
     for (const n of cancels) {
@@ -132,7 +140,13 @@ function DriverCancelAlerts() {
       const copy = notificationCopy(n, dict, state.orders);
       toast.warning(copy.title, { description: copy.body, duration: 5000 });
     }
-  }, [dict, effectiveRole, state.notifications, state.orders, userId]);
+    for (const n of offers) {
+      if (toastedOfferIds.has(n.id)) continue;
+      toastedOfferIds.add(n.id);
+      const copy = notificationCopy(n, dict, state.orders);
+      toast.message(copy.title, { description: copy.body, duration: 5000 });
+    }
+  }, [cancels, dict, offers, state.orders]);
 
   if (cancels.length === 0) return null;
 
@@ -144,28 +158,30 @@ function DriverCancelAlerts() {
           <Alert key={n.id} variant="destructive" className="border-2">
             <CircleAlert />
             <AlertTitle className="text-xl">{copy.title}</AlertTitle>
-            <AlertDescription className="flex flex-col gap-3 text-lg">
+            <AlertDescription className="text-lg">
               <p>{copy.body}</p>
-              <div className="flex flex-wrap gap-2">
-                {copy.href ? (
-                  <Link
-                    href={copy.href}
-                    className="touch-target inline-flex min-h-11 items-center rounded-full bg-destructive px-4 text-base font-semibold text-destructive-foreground"
-                  >
-                    {dict.driver.viewCancelledOrder}
-                  </Link>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  className="touch-target"
-                  onClick={() => markNotificationRead(n.id)}
-                >
-                  {dict.driver.dismiss}
-                </Button>
-              </div>
             </AlertDescription>
+            <div className="col-start-2 mt-3 flex flex-wrap gap-2">
+              {copy.href ? (
+                <LinkButton
+                  href={copy.href}
+                  variant="default"
+                  size="lg"
+                  className="touch-target rounded-full"
+                >
+                  {dict.driver.viewCancelledOrder}
+                </LinkButton>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="touch-target"
+                onClick={() => markNotificationRead(n.id)}
+              >
+                {dict.driver.dismiss}
+              </Button>
+            </div>
           </Alert>
         );
       })}

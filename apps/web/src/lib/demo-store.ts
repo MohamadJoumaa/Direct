@@ -3,7 +3,9 @@ import {
   DEFAULT_SETTINGS,
   canAcceptAnotherOrder,
   clampQuoteToBusinessCosts,
+  driversInsideRadius,
   estimateEtaMinutes,
+  expandDispatchRadius,
   haversineKm,
   quoteDeliveryPrice,
   roundLbp,
@@ -23,6 +25,7 @@ import {
   type UserRole,
 } from "@direct/shared";
 import { locationLabel } from "@/lib/place-name";
+import type { DriverLeg } from "@/lib/route-distance";
 
 export type Profile = {
   id: string;
@@ -177,6 +180,20 @@ export type Order = {
   rating_stars: number | null;
   created_at: string;
   completed_at: string | null;
+  dispatch_radius_km: number | null;
+  offered_at: string | null;
+};
+
+export type OrderOfferStatus = "offered" | "declined" | "accepted";
+
+export type OrderOffer = {
+  order_id: string;
+  driver_id: string;
+  to_pickup_km: number;
+  to_dropoff_km: number;
+  radius_km: number;
+  offered_at: string;
+  status: OrderOfferStatus;
 };
 
 export type DriverLocation = {
@@ -221,7 +238,7 @@ export type DriverDocument = {
   created_at: string;
 };
 
-export type NotificationKind = "generic" | "order_cancelled";
+export type NotificationKind = "generic" | "order_cancelled" | "order_offered";
 
 export type Notification = {
   id: string;
@@ -275,6 +292,7 @@ export type DemoState = {
   notifications: Notification[];
   /** Driver skipped an offer — order stays pending for everyone else. */
   declined_offers: { driver_id: string; order_id: string }[];
+  order_offers: OrderOffer[];
   settings: CompanySettings;
   /** Next unused public order number (never reused). */
   next_order_number: number;
@@ -514,6 +532,8 @@ function seed(): DemoState {
         rating_stars: 5,
         created_at: daysFromNow(-2),
         completed_at: daysFromNow(-2),
+        dispatch_radius_km: null,
+        offered_at: null,
       },
     ],
     reports: [],
@@ -535,6 +555,7 @@ function seed(): DemoState {
     documents: [],
     notifications: [],
     declined_offers: [],
+    order_offers: [],
     checkins: [],
     products: [],
     warehouses: [
@@ -625,6 +646,7 @@ function migrateState(parsed: DemoState): DemoState {
     warehouses: parsed.warehouses ?? [],
     notifications: parsed.notifications ?? [],
     declined_offers: parsed.declined_offers ?? [],
+    order_offers: parsed.order_offers ?? [],
     profiles: (parsed.profiles ?? []).map((p) => {
       if (p.role !== "business") return p;
       const withShop =
@@ -653,6 +675,8 @@ function migrateState(parsed: DemoState): DemoState {
       ...o,
       delivery_fee_lbp: o.delivery_fee_lbp ?? 0,
       order_number: typeof o.order_number === "number" ? o.order_number : 0,
+      dispatch_radius_km: o.dispatch_radius_km ?? null,
+      offered_at: o.offered_at ?? null,
     })),
     next_order_number: parsed.next_order_number ?? FIRST_PUBLIC_ORDER_NUMBER,
     whish: (parsed.whish ?? []).map((t) => {
@@ -765,15 +789,12 @@ export function registerUser(
     created_at: new Date().toISOString(),
   };
   const next = { ...state, profiles: [...state.profiles, profile] };
-  if (input.role === "driver" && input.driver_type) {
-    if (input.driver_type === "medical") {
-      return { state, error: "Medical drivers are not available yet" };
-    }
+  if (input.role === "driver") {
     next.drivers = [
       ...next.drivers,
       {
         id,
-        driver_type: input.driver_type,
+        driver_type: "fast",
         is_online: false,
         is_busy: false,
         is_trusted: false,
@@ -825,13 +846,10 @@ export function createOrder(
     dropoff_lat: number;
     dropoff_lng: number;
     product_description: string;
-    order_type: OrderType;
+    order_type?: OrderType;
+    distanceKm?: number;
   },
 ): { state: DemoState; error?: string; order?: Order } {
-  if (input.order_type === "medical") {
-    return { state, error: "Medical delivery is not available yet" };
-  }
-
   const client = state.profiles.find((p) => p.id === clientId);
   let pickupAddress = input.pickup_address;
   let pickupLat = input.pickup_lat;
@@ -849,13 +867,11 @@ export function createOrder(
     pickupLng = client.business_lng;
   }
 
-  const dist = haversineKm(
-    pickupLat,
-    pickupLng,
-    input.dropoff_lat,
-    input.dropoff_lng,
-  );
-  const quoted = quoteDeliveryPrice(input.order_type, state.settings, dist);
+  const dist =
+    input.distanceKm != null && Number.isFinite(input.distanceKm)
+      ? Math.max(0, input.distanceKm)
+      : haversineKm(pickupLat, pickupLng, input.dropoff_lat, input.dropoff_lng);
+  const quoted = quoteDeliveryPrice("normal", state.settings, dist);
   const quote =
     client?.role === "business"
       ? clampQuoteToBusinessCosts(quoted, withBusinessOrderCosts(client))
@@ -865,15 +881,12 @@ export function createOrder(
     { ...state.settings, revenue_mode: "subscription" },
     quote.baseUsd,
   );
-  const warehouse =
-    input.order_type === "long_distance" ? state.warehouses[0] ?? null : null;
-
   const order_number = nextAvailableOrderNumber(state);
   const order: Order = {
     id: uid(),
     order_number,
     client_id: clientId,
-    order_type: input.order_type,
+    order_type: "normal",
     status: "pending",
     product_description: input.product_description,
     pickup_address: locationLabel(pickupAddress, pickupLat, pickupLng),
@@ -882,7 +895,7 @@ export function createOrder(
     dropoff_address: locationLabel(input.dropoff_address, input.dropoff_lat, input.dropoff_lng),
     dropoff_lat: input.dropoff_lat,
     dropoff_lng: input.dropoff_lng,
-    warehouse_id: warehouse?.id ?? null,
+    warehouse_id: null,
     assigned_driver_id: null,
     long_distance_driver_id: null,
     delivery_fee_usd: quote.totalUsd,
@@ -890,7 +903,7 @@ export function createOrder(
     night_surcharge_usd: quote.nightUsd,
     company_cut_usd: split.company_cut,
     driver_cut_usd: split.driver_cut,
-    eta_minutes: estimateEtaMinutes(dist, input.order_type),
+    eta_minutes: estimateEtaMinutes(dist),
     is_night: quote.nightUsd > 0,
     dispute_50_50: false,
     client_confirmed: false,
@@ -898,6 +911,8 @@ export function createOrder(
     rating_stars: null,
     created_at: new Date().toISOString(),
     completed_at: null,
+    dispatch_radius_km: null,
+    offered_at: null,
   };
 
   // Owner orders: notify admins — leave pending for admin/owner claim
@@ -1007,28 +1022,17 @@ export function claimOrder(
     return { state, error: "This order was already taken" };
   }
 
-  // Match driver type to order — admins skip every type restriction.
-  if (!isAdminActor) {
-    if (order.order_type === "normal" && driver.driver_type !== "fast") {
-      return { state, error: "Only fast drivers can take this order" };
-    }
-    if (order.order_type === "trusted" && driver.driver_type !== "trusted") {
-      return { state, error: "Only trusted drivers can take this order" };
-    }
-    if (order.order_type === "private" && driver.driver_type !== "private") {
-      return { state, error: "Only private drivers can take this order" };
-    }
-    if (order.order_type === "owner" && driver.driver_type !== "owner") {
-      return { state, error: "Owner / admin only" };
-    }
-    if (order.order_type === "long_distance") {
-      if (order.status === "pending" && driver.driver_type !== "fast") {
-        return { state, error: "A fast driver must take it to the warehouse first" };
-      }
-      if (order.status === "at_warehouse" && driver.driver_type !== "long_distance") {
-        return { state, error: "A long-distance driver must take it from the warehouse" };
-      }
-    }
+  if (
+    !isAdminActor &&
+    order.status === "pending" &&
+    !state.order_offers.some(
+      (offer) =>
+        offer.order_id === orderId &&
+        offer.driver_id === driverId &&
+        offer.status === "offered",
+    )
+  ) {
+    return { state, error: "This order is not offered to you" };
   }
 
   const fromWarehouse = order.order_type === "long_distance" && order.status === "at_warehouse";
@@ -1056,10 +1060,14 @@ export function claimOrder(
 
   const drivers = baseDrivers.map((d) => {
     if (d.id !== driverId) return d;
-    if (d.driver_type === "fast" && !isAdminActor && !percentageMode) {
-      return { ...d, is_busy: true };
-    }
+    if (!isAdminActor) return { ...d, is_busy: true };
     return d;
+  });
+
+  const order_offers = (state.order_offers ?? []).map((offer) => {
+    if (offer.order_id !== orderId) return offer;
+    if (offer.driver_id === driverId) return { ...offer, status: "accepted" as const };
+    return offer;
   });
 
   // Leaving the hub: the linked product leaves the warehouse shelf too.
@@ -1067,7 +1075,7 @@ export function claimOrder(
     ? state.products.filter((p) => p.order_id !== orderId)
     : state.products;
 
-  return { state: { ...state, orders, drivers, products } };
+  return { state: { ...state, orders, drivers, products, order_offers } };
 }
 
 export function advanceOrder(
@@ -1484,7 +1492,7 @@ export function approveDocument(
     );
     if (ok) {
       drivers = drivers.map((d) =>
-        d.id === doc.driver_id ? { ...d, is_trusted: true, driver_type: "trusted" } : d,
+        d.id === doc.driver_id ? { ...d, is_trusted: true } : d,
       );
       // Send verification notification
       notifications = [
@@ -1661,33 +1669,42 @@ export function declineOffer(
     return { state, error: "This order is no longer available" };
   }
   const declinedOffers = state.declined_offers ?? [];
-  const already = declinedOffers.some(
+  const alreadyLegacy = declinedOffers.some(
     (d) => d.driver_id === driverId && d.order_id === orderId,
   );
-  if (already) return { state };
+  const order_offers = (state.order_offers ?? []).map((offer) =>
+    offer.order_id === orderId && offer.driver_id === driverId
+      ? { ...offer, status: "declined" as const }
+      : offer,
+  );
   return {
     state: {
       ...state,
-      declined_offers: [...declinedOffers, { driver_id: driverId, order_id: orderId }],
+      order_offers,
+      declined_offers: alreadyLegacy
+        ? declinedOffers
+        : [...declinedOffers, { driver_id: driverId, order_id: orderId }],
     },
   };
+}
+
+export function offerForDriver(
+  state: DemoState,
+  orderId: string,
+  driverId: string,
+): OrderOffer | undefined {
+  return (state.order_offers ?? []).find(
+    (offer) => offer.order_id === orderId && offer.driver_id === driverId,
+  );
 }
 
 export function availableOrdersForDriver(state: DemoState, driverId: string): Order[] {
   const isAdmin = state.profiles.find((p) => p.id === driverId)?.role === "admin";
   const driver = state.drivers.find((d) => d.id === driverId);
-  const loc = state.locations.find((l) => l.driver_id === driverId);
-  const declined = new Set(
-    (state.declined_offers ?? [])
-      .filter((d) => d.driver_id === driverId)
-      .map((d) => d.order_id),
-  );
+  const offers = state.order_offers ?? [];
 
-  // Admins see every claimable order: no type match, no freeze, no busy lock.
   if (isAdmin) {
     return state.orders.filter((o) => {
-      if (declined.has(o.id)) return false;
-      if (o.order_type === "medical") return false;
       if (o.order_type === "long_distance" && o.status === "at_warehouse") return true;
       return o.status === "pending";
     });
@@ -1697,30 +1714,230 @@ export function availableOrdersForDriver(state: DemoState, driverId: string): Or
   if (driver.banned || driver.admin_frozen) return [];
   if (driverPaymentBlocked(state, driver)) return [];
 
-  return state.orders.filter((o) => {
-    if (declined.has(o.id)) return false;
-    if (o.order_type === "medical") return false;
-    if (o.order_type === "long_distance" && o.status === "at_warehouse") {
-      return driver.driver_type === "long_distance";
-    }
-    if (o.status !== "pending") return false;
-    if (o.order_type === "normal") return driver.driver_type === "fast";
-    if (o.order_type === "long_distance") return driver.driver_type === "fast";
-    if (o.order_type === "trusted") return driver.driver_type === "trusted";
-    if (o.order_type === "private") return driver.driver_type === "private";
-    if (o.order_type === "owner") {
-      return (
-        driver.driver_type === "owner" ||
-        state.profiles.find((p) => p.id === driverId)?.role === "admin"
-      );
-    }
-    return false;
-  }).sort((a, b) => {
-    if (!loc) return 0;
-    const da = haversineKm(loc.lat, loc.lng, a.pickup_lat, a.pickup_lng);
-    const db = haversineKm(loc.lat, loc.lng, b.pickup_lat, b.pickup_lng);
-    return da - db;
+  const offeredIds = new Set(
+    offers
+      .filter((offer) => offer.driver_id === driverId && offer.status === "offered")
+      .map((offer) => offer.order_id),
+  );
+
+  return state.orders
+    .filter((o) => o.status === "pending" && offeredIds.has(o.id))
+    .toSorted((a, b) => {
+      const oa = offerForDriver(state, a.id, driverId);
+      const ob = offerForDriver(state, b.id, driverId);
+      return (oa?.to_pickup_km ?? 0) - (ob?.to_pickup_km ?? 0);
+    });
+}
+
+function driverActiveCount(state: DemoState, driverId: string): number {
+  return state.orders.filter(
+    (o) =>
+      (o.assigned_driver_id === driverId || o.long_distance_driver_id === driverId) &&
+      !["completed", "cancelled"].includes(o.status),
+  ).length;
+}
+
+export function isDispatchEligible(state: DemoState, driver: Driver): boolean {
+  if (!driver.is_online || driver.is_busy) return false;
+  if (driver.banned || driver.admin_frozen) return false;
+  if (driverPaymentBlocked(state, driver)) return false;
+  if (state.profiles.find((p) => p.id === driver.id)?.role === "admin") return false;
+  if (!state.locations.some((l) => l.driver_id === driver.id)) return false;
+  return canAcceptAnotherOrder(driver.driver_type, driverActiveCount(state, driver.id));
+}
+
+export function dispatchDriverPoints(
+  state: DemoState,
+): { id: string; lat: number; lng: number }[] {
+  return state.drivers.flatMap((driver) => {
+    if (!isDispatchEligible(state, driver)) return [];
+    const loc = state.locations.find((l) => l.driver_id === driver.id);
+    if (!loc) return [];
+    return [{ id: driver.id, lat: loc.lat, lng: loc.lng }];
   });
+}
+
+export function pendingDispatchOrders(state: DemoState): Order[] {
+  return state.orders.filter((o) => o.status === "pending");
+}
+
+/** In-app now. Replace the body later with FCM / APNs. */
+export function notifyOrderOffered(state: DemoState, driverId: string, order: Order): DemoState {
+  const { notifications } = notifyUser(state, {
+    userId: driverId,
+    title: "New nearby order",
+    body: `${formatOrderNumber(order.order_number)} is waiting near you`,
+    kind: "order_offered",
+    orderId: order.id,
+  });
+  return { ...state, notifications };
+}
+
+function dispatchTimeoutMs(settings: CompanySettings): number {
+  const seconds = settings.dispatch_offer_timeout_sec ?? 60;
+  return Math.max(1, seconds) * 1000;
+}
+
+function offerRoundExpired(
+  order: Order,
+  offers: OrderOffer[],
+  now: Date,
+  timeoutMs: number,
+): boolean {
+  if (offers.length === 0) return false;
+  if (offers.some((offer) => offer.status === "accepted")) return false;
+  const stamp = order.offered_at ?? offers.map((offer) => offer.offered_at).toSorted()[0];
+  if (!stamp) return false;
+  return now.getTime() - new Date(stamp).getTime() >= timeoutMs;
+}
+
+function assignDispatchRing(
+  state: DemoState,
+  order: Order,
+  legs: DriverLeg[],
+  opts: { retry: boolean; now: Date },
+): DemoState {
+  const declined = opts.retry
+    ? new Set<string>()
+    : new Set(
+        (state.order_offers ?? [])
+          .filter((offer) => offer.order_id === order.id && offer.status === "declined")
+          .map((offer) => offer.driver_id),
+      );
+  const eligibleIds = new Set(
+    state.drivers
+      .filter((driver) => isDispatchEligible(state, driver) && !declined.has(driver.id))
+      .map((driver) => driver.id),
+  );
+  const eligibleLegs = legs.filter((leg) => eligibleIds.has(leg.driverId));
+  if (eligibleLegs.length === 0) return state;
+
+  const initial = state.settings.dispatch_initial_radius_km ?? 2;
+  const growth = state.settings.dispatch_radius_growth ?? 1.5;
+  let start = initial;
+  if (opts.retry && order.dispatch_radius_km != null) {
+    const stillInside = eligibleLegs.some((leg) => leg.toPickupKm <= order.dispatch_radius_km!);
+    start = stillInside ? order.dispatch_radius_km : initial;
+  }
+
+  const ring = expandDispatchRadius(
+    eligibleLegs.map((leg) => leg.toPickupKm),
+    start,
+    growth,
+  );
+  if (!ring) return state;
+
+  const inside = driversInsideRadius(eligibleLegs, ring.radiusKm);
+  const offeredAt = opts.now.toISOString();
+  const previous = (state.order_offers ?? []).filter((offer) => offer.order_id === order.id);
+  const newOffers: OrderOffer[] = inside.map((leg) => ({
+    order_id: order.id,
+    driver_id: leg.driverId,
+    to_pickup_km: leg.toPickupKm,
+    to_dropoff_km: leg.toDropoffKm,
+    radius_km: ring.radiusKm,
+    offered_at: offeredAt,
+    status: "offered",
+  }));
+
+  let next: DemoState = {
+    ...state,
+    order_offers: [
+      ...(state.order_offers ?? []).filter((offer) => offer.order_id !== order.id),
+      ...newOffers,
+    ],
+    declined_offers: opts.retry
+      ? (state.declined_offers ?? []).filter((row) => row.order_id !== order.id)
+      : state.declined_offers,
+    orders: state.orders.map((row) =>
+      row.id === order.id
+        ? { ...row, dispatch_radius_km: ring.radiusKm, offered_at: offeredAt }
+        : row,
+    ),
+  };
+
+  for (const offer of newOffers) {
+    const before = previous.find((row) => row.driver_id === offer.driver_id);
+    if (!before || before.status === "declined") {
+      next = notifyOrderOffered(next, offer.driver_id, order);
+    }
+  }
+  return next;
+}
+
+function addDriversToCurrentRing(
+  state: DemoState,
+  order: Order,
+  legs: DriverLeg[],
+  now: Date,
+): DemoState {
+  const radius = order.dispatch_radius_km;
+  if (radius == null) {
+    return assignDispatchRing(state, order, legs, { retry: false, now });
+  }
+  const existing = new Set(
+    (state.order_offers ?? [])
+      .filter((offer) => offer.order_id === order.id)
+      .map((offer) => offer.driver_id),
+  );
+  const eligibleIds = new Set(
+    state.drivers
+      .filter((driver) => isDispatchEligible(state, driver) && !existing.has(driver.id))
+      .map((driver) => driver.id),
+  );
+  const newcomers = driversInsideRadius(
+    legs.filter((leg) => eligibleIds.has(leg.driverId)),
+    radius,
+  );
+  if (newcomers.length === 0) return state;
+
+  const offeredAt = order.offered_at ?? now.toISOString();
+  const added: OrderOffer[] = newcomers.map((leg) => ({
+    order_id: order.id,
+    driver_id: leg.driverId,
+    to_pickup_km: leg.toPickupKm,
+    to_dropoff_km: leg.toDropoffKm,
+    radius_km: radius,
+    offered_at: offeredAt,
+    status: "offered",
+  }));
+
+  let next: DemoState = {
+    ...state,
+    order_offers: [...(state.order_offers ?? []), ...added],
+  };
+  for (const offer of added) {
+    next = notifyOrderOffered(next, offer.driver_id, order);
+  }
+  return next;
+}
+
+export function reconcileOrderDispatch(
+  state: DemoState,
+  orderId: string,
+  legs: DriverLeg[],
+  now: Date = new Date(),
+): DemoState {
+  const order = state.orders.find((row) => row.id === orderId);
+  if (!order || order.status !== "pending") return state;
+  const offers = (state.order_offers ?? []).filter((offer) => offer.order_id === orderId);
+  const timedOut = offerRoundExpired(order, offers, now, dispatchTimeoutMs(state.settings));
+  if (offers.length === 0 || timedOut) {
+    return assignDispatchRing(state, order, legs, { retry: timedOut, now });
+  }
+  return addDriversToCurrentRing(state, order, legs, now);
+}
+
+export function tickDispatch(
+  state: DemoState,
+  legsByOrder: Map<string, DriverLeg[]>,
+  now: Date = new Date(),
+): DemoState {
+  let next = state;
+  for (const order of state.orders.filter((row) => row.status === "pending")) {
+    next = reconcileOrderDispatch(next, order.id, legsByOrder.get(order.id) ?? [], now);
+  }
+  return next;
 }
 
 export function updateProfile(
@@ -1943,12 +2160,9 @@ export function addDriver(
     email: string;
     phone: string;
     password: string;
-    driver_type: DriverType;
+    driver_type?: DriverType;
   },
 ): { state: DemoState; error?: string } {
-  if (input.driver_type === "medical") {
-    return { state, error: "Medical drivers are not available yet" };
-  }
   if (state.profiles.some((p) => p.email.toLowerCase() === input.email.toLowerCase())) {
     return { state, error: "This email is already used" };
   }
@@ -1975,10 +2189,10 @@ export function addDriver(
         ...state.drivers,
         {
           id,
-          driver_type: input.driver_type,
+          driver_type: "fast",
           is_online: false,
           is_busy: false,
-          is_trusted: input.driver_type === "trusted",
+          is_trusted: false,
           rating_avg: 5,
           rating_count: 0,
           subscription_status: "active",

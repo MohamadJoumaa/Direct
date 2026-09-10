@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
-import { PUBLIC_DRIVER_TYPES, DRIVER_TYPE_LABELS, type DriverType, type UserRole } from "@direct/shared";
+import { type UserRole } from "@direct/shared";
 import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { mapsConfigured } from "@/components/maps-config";
@@ -88,7 +88,6 @@ function RegisterForm() {
   const [businessName, setBusinessName] = useState("");
   const [shopAddress, setShopAddress] = useState("");
   const [shopPin, setShopPin] = useState<{ lat: number; lng: number } | null>(null);
-  const [driverType, setDriverType] = useState<DriverType>("fast");
 
   const roleItems = [
     { label: dict.auth.roleClient, value: "client" },
@@ -133,7 +132,6 @@ function RegisterForm() {
       phone,
       password,
       role,
-      driver_type: role === "driver" ? driverType : undefined,
     });
     if (err) {
       toast.error(err);
@@ -213,32 +211,6 @@ function RegisterForm() {
                 onPinChange={setShopPin}
               />
             </>
-          ) : null}
-          {role === "driver" ? (
-            <div className="flex flex-col gap-2">
-              <Label className="text-sm font-medium">{dict.auth.driverType}</Label>
-              <Select
-                value={driverType}
-                onValueChange={(v) => setDriverType(v as DriverType)}
-                items={PUBLIC_DRIVER_TYPES.map((t) => ({
-                  label: DRIVER_TYPE_LABELS[t],
-                  value: t,
-                }))}
-              >
-                <SelectTrigger className={`${inputClass} w-full`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {PUBLIC_DRIVER_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {DRIVER_TYPE_LABELS[t]}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
           ) : null}
           <div className="flex flex-col gap-2">
             <Label className="text-sm font-medium">{dict.common.phone}</Label>
