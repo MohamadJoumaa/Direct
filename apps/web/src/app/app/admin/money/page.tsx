@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Menu } from "lucide-react";
 import { toast } from "sonner";
-import { percentageAccrued, subscriptionBudget, driverRevenue, driverDailyProfit } from "@/lib/demo-store";
+import { percentageAccrued, subscriptionBudget, driverDailyProfit } from "@/lib/demo-store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {

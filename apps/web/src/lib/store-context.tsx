@@ -101,7 +101,6 @@ type StoreContextValue = {
     password: string;
     driver_type: DriverType;
   }) => string | undefined;
-  removeDriver: (driverId: string) => string | undefined;
   setDriverAccountAction: (
     driverId: string,
     action: demo.DriverAccountAction,
@@ -244,11 +243,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       addDriver: (input) => {
         const r = demo.addDriver(state, input);
-        if (r.error) return r.error;
-        commit(r.state);
-      },
-      removeDriver: (driverId) => {
-        const r = demo.removeDriver(state, driverId);
         if (r.error) return r.error;
         commit(r.state);
       },
