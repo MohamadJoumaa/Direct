@@ -24,8 +24,6 @@ export const ORDER_TYPES = [
 ] as const;
 export type OrderType = (typeof ORDER_TYPES)[number];
 
-export const PUBLIC_ORDER_TYPES = ORDER_TYPES.filter((t) => t !== "medical");
-
 export const ORDER_STATUSES = [
   "pending",
   "accepted",
