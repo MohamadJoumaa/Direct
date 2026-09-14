@@ -1,56 +1,54 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import type { OrderStatus, OrderType } from "@direct/shared";
-import { en, type Dictionary } from "./en";
-import { ar } from "./ar";
+import {
+  DICTS,
+  LANG_STORAGE_KEY,
+  dirForLang,
+  isLang,
+  type Dictionary,
+  type Lang,
+} from "@direct/i18n";
 
-export type { Dictionary };
-
-export type Lang = "en" | "ar";
-
-const STORAGE_KEY = "direct-lang";
-const DICTS: Record<Lang, Dictionary> = { en, ar };
+// Dictionaries and the pure string helpers live in @direct/i18n so Expo reads
+// the same copy; only this provider — which drives the document direction — is
+// web-specific. Pages keep importing everything from "@/lib/i18n".
+export { fmt, orderStatusLabel, orderTypeLabel } from "@direct/i18n";
+export type { Dictionary, Lang };
 
 type I18nContextValue = {
   lang: Lang;
   dir: "ltr" | "rtl";
   dict: Dictionary;
+  /** False until the saved language has been read back from storage. */
+  langReady: boolean;
   toggleLang: () => void;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-/** Replace {placeholders} in a dictionary string. */
-export function fmt(template: string, vars: Record<string, string | number>): string {
-  return template.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
-}
-
-export function orderStatusLabel(status: OrderStatus | string, dict: Dictionary): string {
-  return dict.orderStatus[status as OrderStatus] ?? status.replaceAll("_", " ");
-}
-
-export function orderTypeLabel(_type: OrderType, dict: Dictionary): string {
-  return dict.order.delivery;
-}
-
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>("en");
+  // The server always renders English, so the saved choice can only land after
+  // hydration. Anything that can be configured just once per page load (the
+  // Google Maps loader) waits for this flag instead of assuming "en".
+  const [langReady, setLangReady] = useState(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved === "ar" || saved === "en") setLangState(saved);
+    const saved = window.localStorage.getItem(LANG_STORAGE_KEY);
+    if (isLang(saved)) setLangState(saved);
+    setLangReady(true);
   }, []);
 
   useEffect(() => {
     document.documentElement.lang = lang;
-    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+    document.documentElement.dir = dirForLang(lang);
   }, [lang]);
 
   const toggleLang = useCallback(() => {
     setLangState((prev) => {
       const next = prev === "en" ? "ar" : "en";
-      window.localStorage.setItem(STORAGE_KEY, next);
+      window.localStorage.setItem(LANG_STORAGE_KEY, next);
       return next;
     });
   }, []);
@@ -59,8 +57,9 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     <I18nContext.Provider
       value={{
         lang,
-        dir: lang === "ar" ? "rtl" : "ltr",
+        dir: dirForLang(lang),
         dict: DICTS[lang],
+        langReady,
         toggleLang,
       }}
     >

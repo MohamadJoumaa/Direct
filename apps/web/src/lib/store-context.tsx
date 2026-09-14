@@ -32,6 +32,9 @@ type StoreContextValue = {
   login: (identifier: string, password: string) => string | undefined;
   logout: () => void;
   setViewingAs: (role: UserRole | null) => void;
+  /** Re-reads localStorage and commits it if driver positions moved — a
+   *  polling fallback for when a cross-tab `storage` event is missed. */
+  refreshFromStorage: () => void;
   createOrder: (
     clientId: string,
     input: {
@@ -42,8 +45,11 @@ type StoreContextValue = {
       dropoff_lat: number;
       dropoff_lng: number;
       product_description: string;
+      is_urgent?: boolean;
+      price_usd?: number;
     },
   ) => Promise<{ error?: string; orderNumber?: number }>;
+  updateOrderPrice: (orderId: string, clientId: string, priceUsd: number) => string | undefined;
   claimOrder: (orderId: string, driverId: string) => string | undefined;
   declineOffer: (orderId: string, driverId: string) => string | undefined;
   advanceOrder: (
@@ -65,11 +71,11 @@ type StoreContextValue = {
   confirmWhish: (txId: string) => void;
   updateSettings: (settings: Partial<CompanySettings>) => void;
   addDocument: (
-    driverId: string,
-    doc_type: "selfie" | "id" | "vehicle_registration" | "driver_license",
+    userId: string,
+    doc_type: demo.DocType,
     file_name: string,
     file_data?: string,
-  ) => void;
+  ) => string | undefined;
   approveDocument: (docId: string, approve: boolean) => void;
   markNotificationRead: (notifId: string) => void;
   addCheckin: (
@@ -109,13 +115,25 @@ type StoreContextValue = {
     password: string;
     driver_type?: DriverType;
   }) => string | undefined;
+  addAdmin: (input: {
+    full_name: string;
+    email: string;
+    phone: string;
+    password: string;
+  }) => string | undefined;
+  removeAdmin: (adminId: string) => string | undefined;
   setDriverAccountAction: (
     driverId: string,
     action: demo.DriverAccountAction,
   ) => string | undefined;
   setDriverPaymentWaived: (driverId: string, waived: boolean) => string | undefined;
   setDriverRevenueMode: (driverId: string, mode: demo.Driver["revenue_mode"]) => string | undefined;
+  setDriverSubscriptionPlan: (driverId: string, plan: demo.Driver["subscription_plan"]) => string | undefined;
   addWarehouse: (input: { name: string; address: string; lat: number; lng: number }) => void;
+  updateWarehouse: (
+    warehouseId: string,
+    input: { name: string; address: string; lat: number; lng: number },
+  ) => string | undefined;
   removeWarehouse: (warehouseId: string) => string | undefined;
   addWarehouseProduct: (input: {
     warehouse_id: string;
@@ -187,6 +205,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!ready) return;
     const id = window.setInterval(() => {
       void runDispatchPass();
+      // applySubscriptionFreeze returns the same reference when nothing
+      // changed, so this is a no-op tick most of the time — no re-render,
+      // no re-save.
+      setState((prev) => {
+        const next = demo.applySubscriptionFreeze(prev);
+        if (next === prev) return prev;
+        demo.saveState(next);
+        stateRef.current = next;
+        return next;
+      });
     }, 5000);
     return () => window.clearInterval(id);
   }, [ready, runDispatchPass]);
@@ -206,8 +234,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (r.error) return r.error;
         commit(r.state);
       },
-      logout: () => commit({ ...state, sessionUserId: null, viewingAs: null }),
-      setViewingAs: (role) => commit({ ...state, viewingAs: role }),
+      logout: () =>
+        commit({ ...state, sessionUserId: null, viewingAs: null, viewingAsUserId: null }),
+      setViewingAs: (role) => {
+        if (!role) {
+          commit({ ...state, viewingAs: null, viewingAsUserId: null });
+          return;
+        }
+        // Impersonation must carry an identity, not just a role label —
+        // otherwise every impersonated view still runs as the admin.
+        const representative = state.profiles.find((p) => p.role === role);
+        commit({ ...state, viewingAs: role, viewingAsUserId: representative?.id ?? null });
+      },
+      refreshFromStorage: () => {
+        const fresh = demo.loadState();
+        if (JSON.stringify(fresh.locations) === JSON.stringify(stateRef.current.locations)) return;
+        stateRef.current = fresh;
+        setState(fresh);
+      },
       createOrder: async (clientId, input) => {
         const distanceKm = await measureRouteKm(
           { lat: input.pickup_lat, lng: input.pickup_lng },
@@ -222,6 +266,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         );
         commit(demo.reconcileOrderDispatch(r.state, r.order.id, legs));
         return { orderNumber: r.order.order_number };
+      },
+      updateOrderPrice: (orderId, clientId, priceUsd) => {
+        const r = demo.updateOrderPrice(state, orderId, clientId, priceUsd);
+        if (r.error) return r.error;
+        commit(r.state);
       },
       claimOrder: (orderId, driverId) => {
         const r = demo.claimOrder(state, orderId, driverId);
@@ -253,6 +302,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setState((prev) => {
           const next = demo.updateLocation(prev, driverId, lat, lng);
           demo.saveState(next);
+          stateRef.current = next;
           return next;
         });
       },
@@ -266,8 +316,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       confirmWhish: (txId) => commit(demo.confirmWhish(state, txId)),
       updateSettings: (partial) =>
         commit({ ...state, settings: { ...state.settings, ...partial } }),
-      addDocument: (driverId, doc_type, file_name, file_data) =>
-        commit(demo.addDocument(state, driverId, doc_type, file_name, file_data)),
+      addDocument: (userId, doc_type, file_name, file_data) => {
+        const r = demo.addDocument(state, userId, doc_type, file_name, file_data);
+        if (r.error) return r.error;
+        commit(r.state);
+      },
       markNotificationRead: (notifId) => {
         setState((prev) => {
           const next = demo.markNotificationRead(prev, notifId);
@@ -285,7 +338,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         commit(r.state);
       },
       updateProfile: (userId, input) => {
-        const r = demo.updateProfile(state, userId, input);
+        const r = demo.updateProfile(state, state.sessionUserId, userId, input);
         if (r.error) return r.error;
         commit(r.state);
       },
@@ -304,6 +357,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (r.error) return r.error;
         commit(r.state);
       },
+      addAdmin: (input) => {
+        const r = demo.addAdmin(state, input);
+        if (r.error) return r.error;
+        commit(r.state);
+      },
+      removeAdmin: (adminId) => {
+        const r = demo.removeAdmin(state, adminId);
+        if (r.error) return r.error;
+        commit(r.state);
+      },
       setDriverAccountAction: (driverId, action) => {
         const r = demo.setDriverAccountAction(state, driverId, action);
         if (r.error) return r.error;
@@ -319,7 +382,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (r.error) return r.error;
         commit(r.state);
       },
+      setDriverSubscriptionPlan: (driverId, plan) => {
+        const r = demo.setDriverSubscriptionPlan(state, driverId, plan);
+        if (r.error) return r.error;
+        commit(r.state);
+      },
       addWarehouse: (input) => commit(demo.addWarehouse(state, input)),
+      updateWarehouse: (warehouseId, input) => {
+        const r = demo.updateWarehouse(state, warehouseId, input);
+        if (r.error) return r.error;
+        commit(r.state);
+      },
       removeWarehouse: (warehouseId) => {
         const r = demo.removeWarehouse(state, warehouseId);
         if (r.error) return r.error;

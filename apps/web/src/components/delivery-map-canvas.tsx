@@ -10,6 +10,7 @@ import {
 } from "@vis.gl/react-google-maps";
 import { useTheme } from "next-themes";
 import { locationLabel } from "@/lib/place-name";
+import { useI18n } from "@/lib/i18n";
 
 export type MapMarker = {
   id: string;
@@ -115,6 +116,7 @@ function FitToMarkers({ markers }: { markers: MapMarker[] }) {
 
 function MapMarkers({ markers, dark }: { markers: MapMarker[]; dark: boolean }) {
   const loaded = useApiIsLoaded();
+  const { lang } = useI18n();
   if (!loaded) return null;
 
   return (
@@ -126,7 +128,7 @@ function MapMarkers({ markers, dark }: { markers: MapMarker[]; dark: boolean }) 
           <Marker
             key={m.id}
             position={{ lat: m.lat, lng: m.lng }}
-            title={`${m.label} — ${locationLabel(m.place, m.lat, m.lng)}`}
+            title={`${m.label} — ${locationLabel(m.place, m.lat, m.lng, lang)}`}
             icon={
               motorcycle
                 ? motorcycleMarkerIcon(fill, dark)

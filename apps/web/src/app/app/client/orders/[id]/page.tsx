@@ -1,10 +1,18 @@
 "use client";
 
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { formatDeliveryCash } from "@direct/shared";
-import { publicDriverInfo, publicDriverLabel, profilePhotoUrl } from "@/lib/demo-store";
+import { clientPriceError, formatDeliveryCash, scaleLbpToUsd } from "@direct/shared";
+import {
+  orderPriceFloorLbp,
+  orderPriceFloorUsd,
+  publicDriverInfo,
+  publicDriverLabel,
+  profilePhotoUrl,
+  ordersForOwner,
+} from "@/lib/demo-store";
 import { DeliveryMap } from "@/components/delivery-map";
 import { LinkedContactCard } from "@/components/linked-contact";
 import { OrderReceipt } from "@/components/order-receipt";
@@ -12,19 +20,23 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 import { activeDriverId, trackingRoute } from "@/lib/maps-nav";
+
+/** How much one tap of the price arrows moves the offer, in USD. */
+const PRICE_STEP_USD = 0.5;
 
 export default function ClientOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
-  const { state, confirmDelivery, cancelOrder } = useStore();
+  const { state, confirmDelivery, cancelOrder, updateOrderPrice } = useStore();
   const { dict } = useI18n();
   const [stars, setStars] = useState(5);
+  const [priceInput, setPriceInput] = useState("");
   const order = state.orders.find((o) => o.id === params.id);
 
-  if (!user || !order || order.client_id !== user.id) {
+  if (!user || !order || !ordersForOwner(state, user.id).some((o) => o.id === order.id)) {
     return (
         <p className="text-easy">Order not found.</p>
     );
@@ -41,6 +53,45 @@ export default function ClientOrderDetailPage() {
   const warehouse = order.warehouse_id
     ? state.warehouses.find((w) => w.id === order.warehouse_id)
     : null;
+
+  // While no driver has taken the order, the client can still raise what they
+  // pay — but never below what Direct originally quoted.
+  const floorUsd = order ? orderPriceFloorUsd(order) : 0;
+  const floorLbp = order ? orderPriceFloorLbp(order) : 0;
+  const typedUsd = priceInput.trim() === "" ? null : Number(priceInput);
+  const priceProblem =
+    typedUsd == null ? null : clientPriceError({ requestedUsd: typedUsd, quotedUsd: floorUsd });
+  const priceMessage =
+    priceProblem === "below_quote"
+      ? fmt(dict.order.priceBelowQuote, { min: formatDeliveryCash(floorUsd, floorLbp) })
+      : priceProblem === "invalid"
+        ? dict.order.priceInvalid
+        : null;
+
+  // What the arrows currently show: the untouched order price until the client
+  // starts nudging it.
+  const nudging = typedUsd != null && Number.isFinite(typedUsd);
+  const offeredUsd = nudging ? typedUsd : order.delivery_fee_usd;
+  const offeredLbp = nudging
+    ? scaleLbpToUsd(typedUsd, order.delivery_fee_usd, order.delivery_fee_lbp)
+    : order.delivery_fee_lbp;
+
+  function nudgePrice(direction: 1 | -1) {
+    const next = Math.round((offeredUsd + direction * PRICE_STEP_USD) * 100) / 100;
+    setPriceInput(Math.max(floorUsd, next).toFixed(2));
+  }
+
+  function onSavePrice(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user || !order || typedUsd == null) return;
+    const err = updateOrderPrice(order.id, user.id, typedUsd);
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    toast.success(dict.order.priceUpdated);
+    setPriceInput("");
+  }
 
   function onConfirm() {
     if (!user) return;
@@ -115,6 +166,69 @@ export default function ClientOrderDetailPage() {
             )
           }
         />
+
+        {order.status === "pending" ? (
+          <Card className="border-2">
+            <CardHeader>
+              <CardTitle className="text-2xl">{dict.order.editPrice}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={onSavePrice} className="flex flex-col gap-3">
+                {/* Same control as the order form: arrows beside the price,
+                    never below what Direct recommends. */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="inline-flex items-center gap-1 rounded-full border-2 p-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-lg"
+                      className="size-11 shrink-0 rounded-full"
+                      aria-label={dict.order.lowerPrice}
+                      disabled={offeredUsd <= floorUsd}
+                      onClick={() => nudgePrice(-1)}
+                    >
+                      <ChevronDown className="size-5" />
+                    </Button>
+                    <strong className="px-2 text-center text-xl tabular-nums">
+                      {formatDeliveryCash(offeredUsd, offeredLbp)}
+                    </strong>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-lg"
+                      className="size-11 shrink-0 rounded-full"
+                      aria-label={dict.order.raisePrice}
+                      onClick={() => nudgePrice(1)}
+                    >
+                      <ChevronUp className="size-5" />
+                    </Button>
+                  </div>
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="touch-target rounded-full px-6"
+                    disabled={typedUsd == null || priceMessage != null}
+                  >
+                    {dict.common.save}
+                  </Button>
+                </div>
+                {offeredUsd > floorUsd ? (
+                  <p className="text-base text-muted-foreground">
+                    {dict.order.quotedPrice}: {formatDeliveryCash(floorUsd, floorLbp)}
+                  </p>
+                ) : null}
+                <p className="text-base text-muted-foreground">
+                  {fmt(dict.order.priceEditHint, {
+                    min: formatDeliveryCash(floorUsd, floorLbp),
+                  })}
+                </p>
+                {priceMessage ? (
+                  <p className="text-base font-medium text-destructive">{priceMessage}</p>
+                ) : null}
+              </form>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {["pending", "accepted"].includes(order.status) && (
           <Card className="border-2 border-destructive/30 bg-destructive/5">

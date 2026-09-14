@@ -17,11 +17,22 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { ready, state } = useStore();
-  const user = state.profiles.find((p) => p.id === state.sessionUserId) ?? null;
-  const driver = user ? state.drivers.find((d) => d.id === user.id) ?? null : null;
-  const isAdmin = user?.role === "admin";
-  const effectiveRole =
-    isAdmin && state.viewingAs ? state.viewingAs : (user?.role ?? null);
+  const sessionUser = state.profiles.find((p) => p.id === state.sessionUserId) ?? null;
+  // isAdmin always reflects the real signed-in session, never the
+  // impersonated identity, so admin nav keeps working while impersonating.
+  const isAdmin = sessionUser?.role === "admin";
+  const impersonating = isAdmin && state.viewingAs != null;
+  const impersonatedProfile = impersonating
+    ? (state.profiles.find((p) => p.id === state.viewingAsUserId) ?? null)
+    : null;
+  // `user` (and everything derived from it) is the impersonated profile
+  // while impersonating — an admin viewing "as client" sees the demo
+  // client's own orders, not an empty/duplicate list under the admin's id.
+  const user = impersonatedProfile ?? sessionUser;
+  const driver = user ? (state.drivers.find((d) => d.id === user.id) ?? null) : null;
+  const effectiveRole = impersonating
+    ? (impersonatedProfile?.role ?? state.viewingAs)
+    : (sessionUser?.role ?? null);
 
   const value = useMemo(
     () => ({ ready, user, driver, effectiveRole, isAdmin }),

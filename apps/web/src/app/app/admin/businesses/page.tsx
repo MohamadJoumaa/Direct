@@ -33,7 +33,7 @@ export default function AdminBusinessesPage() {
 function BusinessesContent() {
   const { isAdmin } = useAuth();
   const { state, updateProfile, updateBusinessOrderCosts } = useStore();
-  const { dict } = useI18n();
+  const { dict, lang } = useI18n();
   const mapsAvailable = useMapsAvailable();
 
   const businesses = state.profiles.filter((p) => p.role === "business");
@@ -50,6 +50,9 @@ function BusinessesContent() {
 
   useEffect(() => {
     if (!selected) return;
+    // Seeds an editable field, so it keeps the label as stored: translating a
+    // draft the admin is about to save would rewrite their data.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the edit form whenever the selected business changes
     setAddress(
       selected.business_address?.trim()
         ? locationLabel(selected.business_address, selected.business_lat, selected.business_lng)
@@ -138,7 +141,7 @@ function BusinessesContent() {
                       <p className="text-lg font-semibold">{b.business_name || b.full_name}</p>
                       <p className="text-base text-muted-foreground">
                         {b.business_address?.trim()
-                          ? locationLabel(b.business_address, b.business_lat, b.business_lng)
+                          ? locationLabel(b.business_address, b.business_lat, b.business_lng, lang)
                           : dict.auth.pinRequired}
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground">

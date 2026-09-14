@@ -49,8 +49,17 @@ same Whish collect → success-only unlock (or admin confirm / waiver).
 
 ## Subscription
 
-Monthly collect (plus freeze penalty when frozen). Same success-only unlock.
-Grace does not block claiming; `pending_payment` and `frozen` do.
+Two plans, chosen by the driver: **daily** ($2 / 24h) or **monthly** ($20 / 30
+days), plus a freeze penalty when frozen. Same success-only unlock.
+
+Renewal is additive, not a reset: `subscriptionEndsAt(plan, currentEndsAtMs,
+nowMs)` extends from `max(now, currentEndsAtMs)`, so paying early never
+discards remaining time — two daily payments stack to 48h.
+
+Grace differs by plan: `subscriptionGraceMs(plan, settings)` gives the daily
+plan **no grace at all** (it freezes the moment the 24h ends), while monthly
+keeps `settings.grace_days`. Grace does not block claiming; `pending_payment`
+and `frozen` do.
 
 ## Shared exports to use in Expo
 
@@ -62,3 +71,8 @@ Import from `@direct/shared`:
 - `TIMEZONE`, `WORK_DAY_START_HOUR`, `workDayStart`, `workDayRange`
 - `classifyCommissionCut`, `commissionDueNowUsd`, `isDriverPaymentBlockingWork`
 - `WHISH_NUMBER` (display / contact only)
+- `SUBSCRIPTION_PLANS`, `SUBSCRIPTION_PLAN_MS`, `subscriptionPriceUsd`,
+  `subscriptionEndsAt`, `subscriptionGraceMs`, `subscriptionRemaining`,
+  `formatSubscriptionRemaining`
+- `canAcceptAnotherOrder` (driver order-capacity cap)
+- `sequenceStops` (multi-order pickup-before-dropoff route sequencing)

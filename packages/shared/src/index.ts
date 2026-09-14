@@ -59,9 +59,12 @@ import { NIGHT_SURCHARGE_USD, isNightShift } from "./beirut-time";
 export const DEFAULT_SETTINGS = {
   revenue_mode: "subscription" as RevenueMode,
   subscription_price_usd: 20,
+  subscription_daily_price_usd: 2,
   grace_days: 5,
   freeze_penalty_usd: 10,
   company_percentage: 15,
+  /** Cap on how many active orders one driver can hold at once. */
+  max_active_orders: 3,
   night_surcharge_usd: NIGHT_SURCHARGE_USD,
   night_surcharge_lbp: 89_000,
   whish_number: WHISH_NUMBER,
@@ -88,9 +91,11 @@ export const DEFAULT_SETTINGS = {
 export type CompanySettings = {
   revenue_mode: RevenueMode;
   subscription_price_usd: number;
+  subscription_daily_price_usd: number;
   grace_days: number;
   freeze_penalty_usd: number;
   company_percentage: number;
+  max_active_orders: number;
   night_surcharge_usd: number;
   night_surcharge_lbp: number;
   whish_number: string;
@@ -112,24 +117,7 @@ export type CompanySettings = {
   dispatch_offer_timeout_sec: number;
 };
 
-export function roundUsd(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
-/** Cash LBP is quoted in thousands. */
-export function roundLbp(n: number): number {
-  return Math.round(n / 1000) * 1000;
-}
-
-export function formatLbp(n: number): string {
-  return `${Math.round(n).toLocaleString("en-US")} LBP`;
-}
-
-export function formatDeliveryCash(usd: number, lbp?: number | null): string {
-  const usdPart = `$${usd.toFixed(2)}`;
-  if (lbp == null || Number.isNaN(lbp)) return usdPart;
-  return `${usdPart} · ${formatLbp(lbp)}`;
-}
+import { roundLbp, roundUsd } from "./order-price";
 
 /**
  * Piecewise fare: min price from 0→minKm, linear to maxKm, then cap at max.
@@ -310,13 +298,7 @@ export function splitRevenue(
   return { company_cut: 0, driver_cut: deliveryFee };
 }
 
-/** Every driver can hold one active order. */
-export function canAcceptAnotherOrder(
-  _driverType: DriverType | undefined,
-  activeCount: number,
-): boolean {
-  return activeCount < 1;
-}
+export { canAcceptAnotherOrder } from "./capacity";
 
 export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
   normal: "Fast delivery",
@@ -387,4 +369,30 @@ export {
   isDriverPaymentBlockingWork,
   type WhishCollectKind,
 } from "./payment-rules";
+
+export {
+  SUBSCRIPTION_PLANS,
+  SUBSCRIPTION_PLAN_MS,
+  subscriptionPriceUsd,
+  subscriptionEndsAt,
+  subscriptionGraceMs,
+  subscriptionRemaining,
+  formatSubscriptionRemaining,
+  type SubscriptionPlan,
+  type SubscriptionRemaining,
+} from "./subscription";
+
+export { sequenceStops, type RouteStop, type LatLng } from "./route-plan";
+
+export {
+  roundUsd,
+  roundLbp,
+  formatLbp,
+  formatDeliveryCash,
+  URGENT_PRICE_MULTIPLIER,
+  applyUrgentPricing,
+  clientPriceError,
+  scaleLbpToUsd,
+  type ClientPriceInput,
+} from "./order-price";
 

@@ -1,0 +1,2886 @@
+import {
+  DEFAULT_BUSINESS_ORDER_COSTS,
+  DEFAULT_SETTINGS,
+  WHISH_NUMBER,
+  applyUrgentPricing,
+  canAcceptAnotherOrder,
+  clampQuoteToBusinessCosts,
+  clientPriceError,
+  driversInsideRadius,
+  estimateEtaMinutes,
+  expandDispatchRadius,
+  haversineKm,
+  quoteDeliveryPrice,
+  roundLbp,
+  roundUsd,
+  scaleLbpToUsd,
+  splitRevenue,
+  validateBusinessOrderCosts,
+  withBusinessOrderCosts,
+  classifyCommissionCut,
+  commissionDueNowUsd,
+  isDriverPaymentBlockingWork,
+  workDayStart,
+  subscriptionEndsAt,
+  subscriptionGraceMs,
+  subscriptionPriceUsd,
+  type BusinessOrderCosts,
+  type CompanySettings,
+  type DriverType,
+  type OrderStatus,
+  type OrderType,
+  type RevenueMode,
+  type SubscriptionPlan,
+  type UserRole,
+} from "@direct/shared";
+import { locationLabel } from "./place-name";
+import type { DriverLeg } from "./types";
+
+export type Profile = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  password: string;
+  role: UserRole;
+  business_name?: string;
+  business_address?: string;
+  business_lat?: number;
+  business_lng?: number;
+  order_min_usd?: number;
+  order_max_usd?: number;
+  order_min_lbp?: number;
+  order_max_lbp?: number;
+  avatar_url?: string;
+  created_at: string;
+};
+
+/**
+ * The founder's account: reachable at the company Whish number, and the one
+ * admin no other admin can remove. Everything else about it is ordinary.
+ */
+export const PROTECTED_ADMIN_PHONE = WHISH_NUMBER;
+
+const DEFAULT_SHOP = {
+  business_address: "Hamra, Beirut",
+  business_lat: 33.8959,
+  business_lng: 35.478,
+};
+
+export type Driver = {
+  id: string;
+  driver_type: DriverType;
+  is_online: boolean;
+  is_busy: boolean;
+  is_trusted: boolean;
+  rating_avg: number;
+  rating_count: number;
+  subscription_status: "active" | "grace" | "frozen" | "pending_payment";
+  subscription_ends_at: string | null;
+  /** Which plan this driver is on — daily ($2/24h) or monthly ($20/30d). */
+  subscription_plan: SubscriptionPlan;
+  /** Admin freeze — independent of subscription expiry. */
+  admin_frozen: boolean;
+  banned: boolean;
+  /** Admin lets the driver work without paying subscription or commission. */
+  payment_waived: boolean;
+  /** How this driver pays Direct — chosen on their profile. */
+  revenue_mode: RevenueMode;
+};
+
+export function driverCompanyPayMode(
+  driver: Pick<Driver, "revenue_mode"> | undefined,
+  settings?: Pick<CompanySettings, "revenue_mode">,
+): RevenueMode {
+  return driver?.revenue_mode ?? settings?.revenue_mode ?? "subscription";
+}
+
+export type DriverReviewStatus = "paid" | "grace" | "frozen" | "banned" | "unpaid" | "waived";
+export type DriverPayMethod = "whish" | "whish_manual" | "none";
+
+export function driverWouldBePaymentBlocked(state: DemoState | undefined, driver: Driver): boolean {
+  const mode = driverCompanyPayMode(driver, state?.settings);
+  const dueNowUsd =
+    mode === "percentage" && state
+      ? driverCommissionTotals(state, driver.id).dueNow
+      : 0;
+  return isDriverPaymentBlockingWork({
+    revenueMode: mode,
+    dueNowUsd,
+    subscriptionStatus: driver.subscription_status,
+  });
+}
+
+export function driverPaymentBlocked(state: DemoState, driver: Driver): boolean {
+  const mode = driverCompanyPayMode(driver, state.settings);
+  const dueNowUsd =
+    mode === "percentage" ? driverCommissionTotals(state, driver.id).dueNow : 0;
+  return isDriverPaymentBlockingWork({
+    revenueMode: mode,
+    paymentWaived: driver.payment_waived,
+    dueNowUsd,
+    subscriptionStatus: driver.subscription_status,
+  });
+}
+
+export function driverReviewStatus(driver: Driver, state?: DemoState): DriverReviewStatus {
+  if (driver.banned) return "banned";
+  if (driver.admin_frozen) return "frozen";
+  if (driver.payment_waived && driverWouldBePaymentBlocked(state, driver)) return "waived";
+  if (driverCompanyPayMode(driver, state?.settings) !== "percentage") {
+    if (driver.subscription_status === "frozen") return "frozen";
+    if (driver.subscription_status === "grace") return "grace";
+    if (driver.subscription_status === "pending_payment") return "unpaid";
+  }
+  if (
+    driverCompanyPayMode(driver, state?.settings) === "percentage" &&
+    driverWouldBePaymentBlocked(state, driver)
+  ) {
+    return "unpaid";
+  }
+  return "paid";
+}
+
+/** Latest Whish attempt for this driver (list is newest-first). */
+export function driverPayMethod(state: DemoState, driverId: string): DriverPayMethod {
+  const latest = state.whish.find((t) => t.driver_id === driverId);
+  if (!latest) return "none";
+  return latest.source === "api" ? "whish" : "whish_manual";
+}
+
+/** First public order number in the shared sequence (client + business + admin). */
+export const FIRST_PUBLIC_ORDER_NUMBER = 1200;
+
+export function formatOrderNumber(n: number): string {
+  return `#${n}`;
+}
+
+export function nextAvailableOrderNumber(state: {
+  orders: { order_number?: number }[];
+  next_order_number?: number;
+}): number {
+  const maxAssigned = state.orders.reduce((m, o) => Math.max(m, o.order_number ?? 0), 0);
+  return Math.max(
+    state.next_order_number ?? FIRST_PUBLIC_ORDER_NUMBER,
+    maxAssigned + 1,
+    FIRST_PUBLIC_ORDER_NUMBER,
+  );
+}
+
+export type Order = {
+  id: string;
+  /** Short public id shared across client, business, driver, and admin. */
+  order_number: number;
+  client_id: string;
+  order_type: OrderType;
+  status: OrderStatus;
+  product_description: string;
+  pickup_address: string;
+  pickup_lat: number;
+  pickup_lng: number;
+  dropoff_address: string;
+  dropoff_lat: number;
+  dropoff_lng: number;
+  warehouse_id: string | null;
+  assigned_driver_id: string | null;
+  long_distance_driver_id: string | null;
+  delivery_fee_usd: number;
+  delivery_fee_lbp: number;
+  /** What Direct quoted for this trip — the floor under any client price edit. */
+  quoted_fee_usd: number;
+  quoted_fee_lbp: number;
+  /** Client asked for an urgent run: triple price. */
+  is_urgent: boolean;
+  night_surcharge_usd: number;
+  company_cut_usd: number;
+  driver_cut_usd: number;
+  eta_minutes: number | null;
+  is_night: boolean;
+  dispute_50_50: boolean;
+  client_confirmed: boolean;
+  driver_confirmed: boolean;
+  rating_stars: number | null;
+  created_at: string;
+  completed_at: string | null;
+  dispatch_radius_km: number | null;
+  offered_at: string | null;
+};
+
+export type OrderOfferStatus = "offered" | "declined" | "accepted";
+
+export type OrderOffer = {
+  order_id: string;
+  driver_id: string;
+  to_pickup_km: number;
+  to_dropoff_km: number;
+  radius_km: number;
+  offered_at: string;
+  status: OrderOfferStatus;
+};
+
+export type DriverLocation = {
+  driver_id: string;
+  lat: number;
+  lng: number;
+  updated_at: string;
+};
+
+export type Report = {
+  id: string;
+  order_id: string;
+  reporter_id: string;
+  reason: string;
+  status: "open" | "upheld" | "dismissed";
+  created_at: string;
+};
+
+export type WhishKind = "subscription" | "commission";
+
+export type WhishTx = {
+  id: string;
+  driver_id: string;
+  amount_usd: number;
+  phone_ref: string;
+  source: "api" | "manual";
+  status: "pending" | "confirmed" | "failed";
+  kind: WhishKind;
+  /** Plan the driver was paying for at request time — protects against a
+   *  plan switch between request and confirmation mis-crediting the driver. */
+  plan?: SubscriptionPlan;
+  note: string;
+  external_id: string | null;
+  created_at: string;
+  confirmed_at: string | null;
+};
+
+export const DRIVER_DOC_TYPES = [
+  "selfie",
+  "id",
+  "vehicle_registration",
+  "driver_license",
+] as const;
+
+/** Clients and businesses only prove who they are — no vehicle papers. */
+export const CUSTOMER_DOC_TYPES = ["selfie", "id"] as const;
+
+export type DocType = (typeof DRIVER_DOC_TYPES)[number];
+
+/** Which documents this role may upload, and which the admin reviews. */
+export function allowedDocTypes(role: UserRole | undefined): readonly DocType[] {
+  return role === "driver" || role === "admin" ? DRIVER_DOC_TYPES : CUSTOMER_DOC_TYPES;
+}
+
+export type DriverDocument = {
+  id: string;
+  /** The account the document belongs to — a driver, client, or business. */
+  driver_id: string;
+  doc_type: DocType;
+  file_name: string;
+  file_data?: string; // base64 data URL for preview
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+};
+
+/** Every kind other than `generic` renders from the dictionary, so the reader
+ *  sees it in their own language; `generic` falls back to the stored text. */
+export type NotificationKind =
+  | "generic"
+  | "order_cancelled"
+  | "order_offered"
+  | "docs_approved"
+  | "account_frozen"
+  | "account_unfrozen"
+  | "account_banned"
+  | "account_reinstated"
+  | "payment_waived"
+  | "payment_required";
+
+export type Notification = {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  read: boolean;
+  created_at: string;
+  kind?: NotificationKind;
+  order_id?: string;
+};
+
+export type PrivateCheckin = {
+  id: string;
+  order_id: string;
+  driver_id: string;
+  check_date: string;
+  status: "on_time" | "late" | "missed";
+  note: string;
+};
+
+export type Warehouse = {
+  id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+};
+
+export type WarehouseProduct = {
+  id: string;
+  warehouse_id: string;
+  name: string;
+  quantity: number;
+  note: string;
+  order_id: string | null;
+  /** Driver who handed this package in at the hub — empty for stock an admin
+   *  typed in directly. */
+  delivered_by_driver_id: string | null;
+  delivered_by_name: string;
+  delivered_at: string | null;
+  created_at: string;
+};
+
+export type DemoState = {
+  profiles: Profile[];
+  drivers: Driver[];
+  orders: Order[];
+  locations: DriverLocation[];
+  reports: Report[];
+  whish: WhishTx[];
+  documents: DriverDocument[];
+  checkins: PrivateCheckin[];
+  warehouses: Warehouse[];
+  products: WarehouseProduct[];
+  notifications: Notification[];
+  /** Driver skipped an offer — order stays pending for everyone else. */
+  declined_offers: { driver_id: string; order_id: string }[];
+  order_offers: OrderOffer[];
+  settings: CompanySettings;
+  /** Next unused public order number (never reused). */
+  next_order_number: number;
+  sessionUserId: string | null;
+  viewingAs: UserRole | null;
+  /** Identity an impersonating admin is viewing as — a representative
+   *  profile of `viewingAs`, so client/business/driver views each show that
+   *  profile's own data instead of the admin's. */
+  viewingAsUserId: string | null;
+};
+
+export const STORAGE_KEY = "direct-delivery-demo-v1";
+
+/**
+ * Ids are minted on both clients, so this cannot reach for a bare `crypto`:
+ * Hermes has no such global and Expo SDK 57 ships no polyfill for it, so the
+ * identifier alone throws a ReferenceError -- inside `seed()`, which means the
+ * native app dies before its first paint. Browsers keep the native path.
+ */
+function uid() {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (typeof c?.randomUUID === "function") return c.randomUUID();
+  // v4 shape from Math.random: these ids are demo-store keys, never secrets.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+function daysFromNow(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString();
+}
+
+export function seed(): DemoState {
+  const adminId = "00000000-0000-4000-8000-000000000001";
+  const clientId = "00000000-0000-4000-8000-000000000002";
+  const fastId = "00000000-0000-4000-8000-000000000003";
+  const longId = "00000000-0000-4000-8000-000000000004";
+  const trustedId = "00000000-0000-4000-8000-000000000005";
+  const privateId = "00000000-0000-4000-8000-000000000006";
+  const ownerId = "00000000-0000-4000-8000-000000000007";
+  const bizId = "00000000-0000-4000-8000-000000000008";
+
+  return {
+    profiles: [
+      {
+        id: adminId,
+        full_name: "Admin Direct",
+        email: "admin@direct.lb",
+        phone: PROTECTED_ADMIN_PHONE,
+        password: "admin123",
+        role: "admin",
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: clientId,
+        full_name: "Sara Client",
+        email: "client@direct.lb",
+        phone: "70000002",
+        password: "client123",
+        role: "client",
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: bizId,
+        full_name: "Omar Business",
+        email: "business@direct.lb",
+        phone: "70000008",
+        password: "biz123",
+        role: "business",
+        business_name: "Omar Shop",
+        business_address: DEFAULT_SHOP.business_address,
+        business_lat: DEFAULT_SHOP.business_lat,
+        business_lng: DEFAULT_SHOP.business_lng,
+        ...DEFAULT_BUSINESS_ORDER_COSTS,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: fastId,
+        full_name: "Ali Fast",
+        email: "fast@direct.lb",
+        phone: "70000003",
+        password: "driver123",
+        role: "driver",
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: longId,
+        full_name: "Rami Long",
+        email: "long@direct.lb",
+        phone: "70000004",
+        password: "driver123",
+        role: "driver",
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: trustedId,
+        full_name: "Maya Trusted",
+        email: "trusted@direct.lb",
+        phone: "70000005",
+        password: "driver123",
+        role: "driver",
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: privateId,
+        full_name: "Karim Private",
+        email: "private@direct.lb",
+        phone: "70000006",
+        password: "driver123",
+        role: "driver",
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: ownerId,
+        full_name: "Owner Driver",
+        email: "owner@direct.lb",
+        phone: "70000007",
+        password: "driver123",
+        role: "driver",
+        created_at: new Date().toISOString(),
+      },
+    ],
+    drivers: [
+      {
+        id: adminId,
+        driver_type: "owner",
+        is_online: true,
+        is_busy: false,
+        is_trusted: true,
+        rating_avg: 5,
+        rating_count: 0,
+        subscription_status: "active",
+        subscription_ends_at: daysFromNow(365),
+        subscription_plan: "monthly",
+        admin_frozen: false,
+        banned: false,
+        payment_waived: false,
+        revenue_mode: "subscription",
+      },
+      {
+        id: fastId,
+        driver_type: "fast",
+        is_online: true,
+        is_busy: false,
+        is_trusted: false,
+        rating_avg: 4.8,
+        rating_count: 12,
+        subscription_status: "active",
+        subscription_ends_at: daysFromNow(20),
+        subscription_plan: "monthly",
+        admin_frozen: false,
+        banned: false,
+        payment_waived: false,
+        revenue_mode: "subscription",
+      },
+      {
+        id: longId,
+        driver_type: "long_distance",
+        is_online: true,
+        is_busy: false,
+        is_trusted: false,
+        rating_avg: 4.6,
+        rating_count: 8,
+        subscription_status: "active",
+        subscription_ends_at: daysFromNow(12),
+        subscription_plan: "monthly",
+        admin_frozen: false,
+        banned: false,
+        payment_waived: false,
+        revenue_mode: "subscription",
+      },
+      {
+        id: trustedId,
+        driver_type: "trusted",
+        is_online: true,
+        is_busy: false,
+        is_trusted: true,
+        rating_avg: 4.9,
+        rating_count: 20,
+        subscription_status: "active",
+        subscription_ends_at: daysFromNow(25),
+        subscription_plan: "monthly",
+        admin_frozen: false,
+        banned: false,
+        payment_waived: false,
+        revenue_mode: "subscription",
+      },
+      {
+        id: privateId,
+        driver_type: "private",
+        is_online: true,
+        is_busy: false,
+        is_trusted: false,
+        rating_avg: 4.7,
+        rating_count: 5,
+        subscription_status: "grace",
+        subscription_ends_at: daysFromNow(-2),
+        subscription_plan: "monthly",
+        admin_frozen: false,
+        banned: false,
+        payment_waived: false,
+        revenue_mode: "subscription",
+      },
+      {
+        id: ownerId,
+        driver_type: "owner",
+        is_online: true,
+        is_busy: false,
+        is_trusted: false,
+        rating_avg: 5,
+        rating_count: 3,
+        subscription_status: "active",
+        subscription_ends_at: daysFromNow(30),
+        subscription_plan: "monthly",
+        admin_frozen: false,
+        banned: false,
+        payment_waived: false,
+        revenue_mode: "subscription",
+      },
+    ],
+    locations: [
+      { driver_id: adminId, lat: 33.8938, lng: 35.502, updated_at: new Date().toISOString() },
+      { driver_id: fastId, lat: 33.8938, lng: 35.5018, updated_at: new Date().toISOString() },
+      { driver_id: longId, lat: 33.9, lng: 35.51, updated_at: new Date().toISOString() },
+      { driver_id: trustedId, lat: 33.88, lng: 35.49, updated_at: new Date().toISOString() },
+      { driver_id: privateId, lat: 33.87, lng: 35.52, updated_at: new Date().toISOString() },
+      { driver_id: ownerId, lat: 33.895, lng: 35.505, updated_at: new Date().toISOString() },
+    ],
+    orders: [
+      {
+        id: "ord-demo-completed-fast",
+        order_number: FIRST_PUBLIC_ORDER_NUMBER,
+        client_id: clientId,
+        order_type: "normal",
+        status: "completed",
+        product_description: "Documents envelope",
+        pickup_address: "Hamra, Beirut",
+        pickup_lat: 33.8959,
+        pickup_lng: 35.478,
+        dropoff_address: "Achrafieh, Beirut",
+        dropoff_lat: 33.8869,
+        dropoff_lng: 35.5194,
+        warehouse_id: null,
+        assigned_driver_id: fastId,
+        long_distance_driver_id: null,
+        delivery_fee_usd: 4,
+        delivery_fee_lbp: 360000,
+        quoted_fee_usd: 4,
+        quoted_fee_lbp: 360000,
+        is_urgent: false,
+        night_surcharge_usd: 0,
+        company_cut_usd: 1,
+        driver_cut_usd: 3,
+        eta_minutes: 18,
+        is_night: false,
+        dispute_50_50: false,
+        client_confirmed: true,
+        driver_confirmed: true,
+        rating_stars: 5,
+        created_at: daysFromNow(-2),
+        completed_at: daysFromNow(-2),
+        dispatch_radius_km: null,
+        offered_at: null,
+      },
+    ],
+    reports: [],
+    whish: [
+      {
+        id: uid(),
+        driver_id: fastId,
+        amount_usd: 20,
+        phone_ref: "70000003",
+        source: "manual",
+        status: "confirmed",
+        kind: "subscription",
+        note: "Monthly subscription",
+        external_id: null,
+        created_at: daysFromNow(-10),
+        confirmed_at: daysFromNow(-10),
+      },
+    ],
+    documents: [],
+    notifications: [],
+    declined_offers: [],
+    order_offers: [],
+    checkins: [],
+    products: [],
+    warehouses: [
+      {
+        id: "wh-beirut",
+        name: "Direct Hub Beirut",
+        address: "Beirut Central Warehouse",
+        lat: 33.8938,
+        lng: 35.5018,
+      },
+    ],
+    settings: { ...DEFAULT_SETTINGS },
+    next_order_number: FIRST_PUBLIC_ORDER_NUMBER + 1,
+    sessionUserId: null,
+    viewingAs: null,
+    viewingAsUserId: null,
+  };
+}
+
+/** Storage-free initial state. Both clients render this first — web so SSR
+    and the first client paint match, Expo so the first frame is not blank —
+    then swap in persisted state from a mount effect. */
+export function initialState(): DemoState {
+  return seed();
+}
+
+/** Every admin has an owner driver row so driver-view has no restrictions. */
+function ensureAdminDriver(state: DemoState): DemoState {
+  const admins = state.profiles.filter((p) => p.role === "admin");
+  if (admins.length === 0) return state;
+  const drivers = [...state.drivers];
+  const locations = [...state.locations];
+  let changed = false;
+
+  for (const admin of admins) {
+    if (!drivers.some((d) => d.id === admin.id)) {
+      drivers.push({
+        id: admin.id,
+        driver_type: "owner",
+        is_online: true,
+        is_busy: false,
+        is_trusted: true,
+        rating_avg: 5,
+        rating_count: 0,
+        subscription_status: "active",
+        subscription_ends_at: daysFromNow(365),
+        subscription_plan: "monthly",
+        admin_frozen: false,
+        banned: false,
+        payment_waived: false,
+        revenue_mode: "subscription",
+      });
+      changed = true;
+    }
+    if (!locations.some((l) => l.driver_id === admin.id)) {
+      locations.push({
+        driver_id: admin.id,
+        lat: 33.8938,
+        lng: 35.502,
+        updated_at: new Date().toISOString(),
+      });
+      changed = true;
+    }
+  }
+
+  if (!changed) return state;
+  return { ...state, drivers, locations };
+}
+
+export function migrateState(parsed: DemoState): DemoState {
+  const next: DemoState = {
+    ...parsed,
+    products: (parsed.products ?? []).map((p) => ({
+      ...p,
+      delivered_by_driver_id: p.delivered_by_driver_id ?? null,
+      delivered_by_name: p.delivered_by_name ?? "",
+      delivered_at: p.delivered_at ?? null,
+    })),
+    warehouses: parsed.warehouses ?? [],
+    notifications: parsed.notifications ?? [],
+    declined_offers: parsed.declined_offers ?? [],
+    order_offers: parsed.order_offers ?? [],
+    viewingAsUserId: parsed.viewingAsUserId ?? null,
+    profiles: (parsed.profiles ?? []).map((p) => {
+      if (p.role !== "business") return p;
+      const withShop =
+        p.business_lat != null &&
+        p.business_lng != null &&
+        p.business_address &&
+        p.business_address.trim().length >= 3
+          ? p
+          : {
+              ...p,
+              business_address: p.business_address?.trim() || DEFAULT_SHOP.business_address,
+              business_lat: p.business_lat ?? DEFAULT_SHOP.business_lat,
+              business_lng: p.business_lng ?? DEFAULT_SHOP.business_lng,
+            };
+      return { ...withShop, ...withBusinessOrderCosts(withShop) };
+    }),
+    settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
+    drivers: (parsed.drivers ?? []).map((d) => ({
+      ...d,
+      admin_frozen: d.admin_frozen ?? false,
+      banned: d.banned ?? false,
+      payment_waived: d.payment_waived ?? false,
+      revenue_mode: d.revenue_mode ?? parsed.settings?.revenue_mode ?? "subscription",
+      subscription_plan: d.subscription_plan ?? "monthly",
+    })),
+    orders: (parsed.orders ?? []).map((o) => ({
+      ...o,
+      delivery_fee_lbp: o.delivery_fee_lbp ?? 0,
+      // Orders placed before price edits existed were never raised, so what
+      // they charge is exactly what was quoted.
+      quoted_fee_usd: o.quoted_fee_usd ?? o.delivery_fee_usd ?? 0,
+      quoted_fee_lbp: o.quoted_fee_lbp ?? o.delivery_fee_lbp ?? 0,
+      is_urgent: o.is_urgent ?? false,
+      order_number: typeof o.order_number === "number" ? o.order_number : 0,
+      dispatch_radius_km: o.dispatch_radius_km ?? null,
+      offered_at: o.offered_at ?? null,
+    })),
+    next_order_number: parsed.next_order_number ?? FIRST_PUBLIC_ORDER_NUMBER,
+    whish: (parsed.whish ?? []).map((t) => {
+      const fromNote =
+        typeof t.note === "string"
+          ? t.note.match(/Whish(?: collect)? (\d+)/)?.[1] ?? null
+          : null;
+      return {
+        ...t,
+        kind: t.kind === "commission" ? "commission" : "subscription",
+        external_id: t.external_id ?? fromNote,
+      };
+    }),
+  };
+  return ensureOrderNumbers(ensureProtectedAdmin(ensureAdminDriver(next)));
+}
+
+/**
+ * The founder's account is the one reachable at the company Whish number, and
+ * it is the account no admin can delete. Demo states saved before that rule
+ * existed adopt it here — but only while the number is still free, so a real
+ * second account on that number is never overwritten.
+ */
+function ensureProtectedAdmin(state: DemoState): DemoState {
+  if (state.profiles.some((p) => digits(p.phone) === digits(PROTECTED_ADMIN_PHONE))) {
+    return state;
+  }
+  const founder = state.profiles
+    .filter((p) => p.role === "admin")
+    .toSorted((a, b) => a.created_at.localeCompare(b.created_at))[0];
+  if (!founder) return state;
+  return {
+    ...state,
+    profiles: state.profiles.map((p) =>
+      p.id === founder.id ? { ...p, phone: PROTECTED_ADMIN_PHONE } : p,
+    ),
+  };
+}
+
+function ensureOrderNumbers(state: DemoState): DemoState {
+  const used = new Set<number>();
+  for (const o of state.orders) {
+    if (o.order_number >= FIRST_PUBLIC_ORDER_NUMBER) used.add(o.order_number);
+  }
+  let cursor = FIRST_PUBLIC_ORDER_NUMBER;
+  const byAge = [...state.orders].toSorted(
+    (a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
+  );
+  const assigned = new Map<string, number>();
+  for (const o of byAge) {
+    if (o.order_number >= FIRST_PUBLIC_ORDER_NUMBER) {
+      assigned.set(o.id, o.order_number);
+      continue;
+    }
+    while (used.has(cursor)) cursor += 1;
+    assigned.set(o.id, cursor);
+    used.add(cursor);
+    cursor += 1;
+  }
+  const maxAssigned = state.orders.reduce((m, o) => Math.max(m, assigned.get(o.id) ?? 0), 0);
+  return {
+    ...state,
+    next_order_number: Math.max(
+      state.next_order_number ?? FIRST_PUBLIC_ORDER_NUMBER,
+      maxAssigned + 1,
+      FIRST_PUBLIC_ORDER_NUMBER,
+    ),
+    orders: state.orders.map((o) => ({ ...o, order_number: assigned.get(o.id)! })),
+  };
+}
+
+function digits(s: string) {
+  return s.replace(/\D/g, "");
+}
+
+export function registerUser(
+  state: DemoState,
+  input: {
+    full_name: string;
+    email: string;
+    phone: string;
+    password: string;
+    role: UserRole;
+    business_name?: string;
+    business_address?: string;
+    business_lat?: number;
+    business_lng?: number;
+    driver_type?: DriverType;
+  },
+): { state: DemoState; error?: string; userId?: string } {
+  if (state.profiles.some((p) => p.email.toLowerCase() === input.email.toLowerCase())) {
+    return { state, error: "This email is already used" };
+  }
+  if (state.profiles.some((p) => digits(p.phone) === digits(input.phone))) {
+    return { state, error: "This phone number is already used" };
+  }
+  if (input.role === "business") {
+    if (!input.business_name || input.business_name.trim().length < 2) {
+      return { state, error: "Enter your business name" };
+    }
+    if (
+      !input.business_address ||
+      input.business_address.trim().length < 3 ||
+      typeof input.business_lat !== "number" ||
+      typeof input.business_lng !== "number"
+    ) {
+      return { state, error: "Pin your shop on the map" };
+    }
+  }
+  const id = uid();
+  const profile: Profile = {
+    id,
+    full_name: input.full_name,
+    email: input.email.toLowerCase(),
+    phone: input.phone,
+    password: input.password,
+    role: input.role,
+    business_name: input.business_name,
+    business_address:
+      input.role === "business"
+        ? locationLabel(input.business_address, input.business_lat, input.business_lng)
+        : undefined,
+    business_lat: input.role === "business" ? input.business_lat : undefined,
+    business_lng: input.role === "business" ? input.business_lng : undefined,
+    ...(input.role === "business" ? DEFAULT_BUSINESS_ORDER_COSTS : {}),
+    created_at: new Date().toISOString(),
+  };
+  const next = { ...state, profiles: [...state.profiles, profile] };
+  if (input.role === "driver") {
+    next.drivers = [
+      ...next.drivers,
+      {
+        id,
+        driver_type: input.driver_type ?? "fast",
+        is_online: false,
+        is_busy: false,
+        is_trusted: false,
+        rating_avg: 5,
+        rating_count: 0,
+        subscription_status: "pending_payment",
+        subscription_ends_at: null,
+        subscription_plan: "monthly",
+        admin_frozen: false,
+        banned: false,
+        payment_waived: false,
+        revenue_mode: next.settings.revenue_mode,
+      },
+    ];
+    next.locations = [
+      ...next.locations,
+      { driver_id: id, lat: 33.8938, lng: 35.5018, updated_at: new Date().toISOString() },
+    ];
+  }
+  next.sessionUserId = id;
+  next.viewingAs = null;
+  next.viewingAsUserId = null;
+  return { state: next, userId: id };
+}
+
+export function loginUser(
+  state: DemoState,
+  identifier: string,
+  password: string,
+): { state: DemoState; error?: string } {
+  const id = identifier.trim().toLowerCase();
+  const profile = state.profiles.find(
+    (p) =>
+      p.email.toLowerCase() === id ||
+      digits(p.phone) === digits(identifier) ||
+      p.phone === identifier,
+  );
+  if (!profile || profile.password !== password) {
+    return { state, error: "Wrong email/phone or password" };
+  }
+  return {
+    state: { ...state, sessionUserId: profile.id, viewingAs: null, viewingAsUserId: null },
+  };
+}
+
+/**
+ * Resolves the cash an order charges: the quote, or the client's own higher
+ * price. Returns an error message instead when the client went below the quote.
+ */
+function clientPriceUpdate(
+  quotedUsd: number,
+  quotedLbp: number,
+  requestedUsd: number | undefined,
+): { usd: number; lbp: number; error?: string } {
+  if (requestedUsd == null) return { usd: quotedUsd, lbp: quotedLbp };
+  const problem = clientPriceError({ requestedUsd, quotedUsd });
+  if (problem === "invalid") {
+    return { usd: quotedUsd, lbp: quotedLbp, error: "Enter a valid price" };
+  }
+  if (problem === "below_quote") {
+    return {
+      usd: quotedUsd,
+      lbp: quotedLbp,
+      error: `The price cannot go below $${quotedUsd.toFixed(2)}`,
+    };
+  }
+  return {
+    usd: roundUsd(requestedUsd),
+    lbp: scaleLbpToUsd(requestedUsd, quotedUsd, quotedLbp),
+  };
+}
+
+/** The lowest price this order may charge — what Direct originally quoted. */
+export function orderPriceFloorUsd(order: Pick<Order, "quoted_fee_usd" | "delivery_fee_usd">): number {
+  return order.quoted_fee_usd || order.delivery_fee_usd;
+}
+
+export function orderPriceFloorLbp(order: Pick<Order, "quoted_fee_lbp" | "delivery_fee_lbp">): number {
+  return order.quoted_fee_lbp || order.delivery_fee_lbp;
+}
+
+/**
+ * Client re-prices their own order. Allowed only while it is still pending:
+ * once a driver accepted, the pay they agreed to cannot move under them.
+ */
+export function updateOrderPrice(
+  state: DemoState,
+  orderId: string,
+  clientId: string,
+  priceUsd: number,
+): { state: DemoState; error?: string } {
+  const order = state.orders.find((o) => o.id === orderId);
+  if (!order) return { state, error: "Order not found" };
+  const actor = state.profiles.find((p) => p.id === clientId);
+  if (order.client_id !== clientId && actor?.role !== "admin") {
+    return { state, error: "This is not your order" };
+  }
+  if (order.status !== "pending") {
+    return { state, error: "The price can only change before a driver accepts" };
+  }
+  const priced = clientPriceUpdate(
+    orderPriceFloorUsd(order),
+    orderPriceFloorLbp(order),
+    priceUsd,
+  );
+  if (priced.error) return { state, error: priced.error };
+
+  const baseUsd = Math.max(0, priced.usd - (order.night_surcharge_usd ?? 0));
+  const split = splitRevenue(
+    priced.usd,
+    { ...state.settings, revenue_mode: "subscription" },
+    baseUsd,
+  );
+  return {
+    state: {
+      ...state,
+      orders: state.orders.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              delivery_fee_usd: priced.usd,
+              delivery_fee_lbp: priced.lbp,
+              company_cut_usd: split.company_cut,
+              driver_cut_usd: split.driver_cut,
+            }
+          : o,
+      ),
+    },
+  };
+}
+
+export function createOrder(
+  state: DemoState,
+  clientId: string,
+  input: {
+    pickup_address: string;
+    pickup_lat: number;
+    pickup_lng: number;
+    dropoff_address: string;
+    dropoff_lat: number;
+    dropoff_lng: number;
+    product_description: string;
+    order_type?: OrderType;
+    distanceKm?: number;
+    /** Triple price, so a free driver takes it ahead of everything else. */
+    is_urgent?: boolean;
+    /** Client's own price. Never below the quote — see `clientPriceError`. */
+    price_usd?: number;
+  },
+): { state: DemoState; error?: string; order?: Order } {
+  const client = state.profiles.find((p) => p.id === clientId);
+  // A business used to be pinned to its shop for every pickup. It isn't: a shop
+  // sends things from wherever it happens to be. The shop is only the default
+  // the client page pre-fills, so whatever arrives here is what was chosen.
+  const pickupAddress = input.pickup_address;
+  const pickupLat = input.pickup_lat;
+  const pickupLng = input.pickup_lng;
+
+  const dist =
+    input.distanceKm != null && Number.isFinite(input.distanceKm)
+      ? Math.max(0, input.distanceKm)
+      : haversineKm(pickupLat, pickupLng, input.dropoff_lat, input.dropoff_lng);
+  const quoted = quoteDeliveryPrice("normal", state.settings, dist);
+  const inBusinessRange =
+    client?.role === "business"
+      ? clampQuoteToBusinessCosts(quoted, withBusinessOrderCosts(client))
+      : quoted;
+  // Urgency multiplies *after* the business ceiling: the ×3 is the whole point
+  // of the option, so a per-business cap must not swallow it.
+  const urgent = input.is_urgent === true;
+  const quote = applyUrgentPricing(inBusinessRange, urgent);
+
+  const priceCheck = clientPriceUpdate(quote.totalUsd, quote.totalLbp, input.price_usd);
+  if (priceCheck.error) return { state, error: priceCheck.error };
+
+  const split = splitRevenue(
+    priceCheck.usd,
+    { ...state.settings, revenue_mode: "subscription" },
+    quote.baseUsd,
+  );
+  const order_number = nextAvailableOrderNumber(state);
+  const order: Order = {
+    id: uid(),
+    order_number,
+    client_id: clientId,
+    order_type: "normal",
+    status: "pending",
+    product_description: input.product_description,
+    pickup_address: locationLabel(pickupAddress, pickupLat, pickupLng),
+    pickup_lat: pickupLat,
+    pickup_lng: pickupLng,
+    dropoff_address: locationLabel(input.dropoff_address, input.dropoff_lat, input.dropoff_lng),
+    dropoff_lat: input.dropoff_lat,
+    dropoff_lng: input.dropoff_lng,
+    warehouse_id: null,
+    assigned_driver_id: null,
+    long_distance_driver_id: null,
+    delivery_fee_usd: priceCheck.usd,
+    delivery_fee_lbp: priceCheck.lbp,
+    quoted_fee_usd: quote.totalUsd,
+    quoted_fee_lbp: quote.totalLbp,
+    is_urgent: urgent,
+    night_surcharge_usd: quote.nightUsd,
+    company_cut_usd: split.company_cut,
+    driver_cut_usd: split.driver_cut,
+    eta_minutes: estimateEtaMinutes(dist),
+    is_night: quote.nightUsd > 0,
+    dispute_50_50: false,
+    client_confirmed: false,
+    driver_confirmed: false,
+    rating_stars: null,
+    created_at: new Date().toISOString(),
+    completed_at: null,
+    dispatch_radius_km: null,
+    offered_at: null,
+  };
+
+  // Owner orders: notify admins — leave pending for admin/owner claim
+  return {
+    state: {
+      ...state,
+      orders: [order, ...state.orders],
+      next_order_number: order_number + 1,
+    },
+    order,
+  };
+}
+
+function applyDriverRevenueSplit(
+  order: Order,
+  settings: CompanySettings,
+  driver: Driver,
+): Order {
+  const mode = driverCompanyPayMode(driver, settings);
+  const base = Math.max(0, order.delivery_fee_usd - (order.night_surcharge_usd ?? 0));
+  if (mode === "subscription" && order.company_cut_usd > 0) {
+    return order;
+  }
+  const split = splitRevenue(order.delivery_fee_usd, { ...settings, revenue_mode: mode }, base);
+  return {
+    ...order,
+    company_cut_usd: split.company_cut,
+    driver_cut_usd: split.driver_cut,
+  };
+}
+
+export function claimOrder(
+  state: DemoState,
+  orderId: string,
+  driverId: string,
+): { state: DemoState; error?: string } {
+  const actor = state.profiles.find((p) => p.id === driverId);
+  const isAdminActor = actor?.role === "admin";
+  let driver = state.drivers.find((d) => d.id === driverId);
+
+  // Admins can take owner orders without a driver profile
+  if (!driver && isAdminActor) {
+    driver = {
+      id: driverId,
+      driver_type: "owner",
+      is_online: true,
+      is_busy: false,
+      is_trusted: false,
+      rating_avg: 5,
+      rating_count: 0,
+      subscription_status: "active",
+      subscription_ends_at: daysFromNow(365),
+      subscription_plan: "monthly",
+      admin_frozen: false,
+      banned: false,
+      payment_waived: false,
+      revenue_mode: state.settings.revenue_mode,
+    };
+  }
+
+  if (!driver) return { state, error: "Driver not found" };
+
+  const percentageMode = driverCompanyPayMode(driver, state.settings) === "percentage";
+  const payOpen = Boolean(driver.payment_waived);
+  if (!isAdminActor && percentageMode && !payOpen) {
+    const due = driverCommissionTotals(state, driverId).dueNow;
+    if (due > 0) {
+      return {
+        state,
+        error: `Pay yesterday's company cut ($${due.toFixed(2)}) via Whish first`,
+      };
+    }
+  }
+  if (!isAdminActor && driver.banned) {
+    return { state, error: "This account is banned" };
+  }
+  if (!isAdminActor && driver.admin_frozen) {
+    return { state, error: "Your account is frozen by an admin" };
+  }
+  if (!isAdminActor && !payOpen && !percentageMode && driver.subscription_status === "frozen") {
+    const penalty = state.settings.freeze_penalty_usd;
+    return {
+      state,
+      error: `Your account is frozen. Pay subscription + $${penalty} to reactivate.`,
+    };
+  }
+  if (!isAdminActor && !payOpen && !percentageMode && driver.subscription_status === "pending_payment") {
+    return { state, error: "Pay your subscription first" };
+  }
+
+  const activeCount = state.orders.filter(
+    (o) =>
+      (o.assigned_driver_id === driverId || o.long_distance_driver_id === driverId) &&
+      !["completed", "cancelled"].includes(o.status),
+  ).length;
+
+  if (
+    !isAdminActor &&
+    !percentageMode &&
+    !canAcceptAnotherOrder(driver.driver_type, activeCount, state.settings.max_active_orders)
+  ) {
+    return { state, error: "Finish your current delivery first" };
+  }
+
+  const order = state.orders.find((o) => o.id === orderId);
+  if (!order) return { state, error: "Order not found" };
+  if (order.status !== "pending" && !(order.status === "at_warehouse" && order.order_type === "long_distance")) {
+    return { state, error: "This order was already taken" };
+  }
+
+  if (
+    !isAdminActor &&
+    order.status === "pending" &&
+    !state.order_offers.some(
+      (offer) =>
+        offer.order_id === orderId &&
+        offer.driver_id === driverId &&
+        offer.status === "offered",
+    )
+  ) {
+    return { state, error: "This order is not offered to you" };
+  }
+
+  const fromWarehouse = order.order_type === "long_distance" && order.status === "at_warehouse";
+
+  const orders = state.orders.map((o) => {
+    if (o.id !== orderId) return o;
+    const withSplit = applyDriverRevenueSplit(o, state.settings, driver);
+    if (fromWarehouse) {
+      return {
+        ...withSplit,
+        status: "in_transit" as OrderStatus,
+        long_distance_driver_id: driverId,
+      };
+    }
+    return {
+      ...withSplit,
+      status: "accepted" as OrderStatus,
+      assigned_driver_id: driverId,
+    };
+  });
+
+  // Persist the synthesized admin driver row so busy/online tracking works.
+  const hasRow = state.drivers.some((d) => d.id === driverId);
+  const baseDrivers = hasRow ? state.drivers : [...state.drivers, driver];
+
+  const drivers = baseDrivers.map((d) => {
+    if (d.id !== driverId) return d;
+    if (!isAdminActor) {
+      // is_busy means "at capacity", not "has an order" — a driver may hold
+      // several active orders up to max_active_orders before going busy.
+      const atCapacity = !canAcceptAnotherOrder(
+        d.driver_type,
+        activeCount + 1,
+        state.settings.max_active_orders,
+      );
+      return { ...d, is_busy: atCapacity };
+    }
+    return d;
+  });
+
+  const order_offers = (state.order_offers ?? []).map((offer) => {
+    if (offer.order_id !== orderId) return offer;
+    if (offer.driver_id === driverId) return { ...offer, status: "accepted" as const };
+    return offer;
+  });
+
+  // Leaving the hub: the linked product leaves the warehouse shelf too.
+  const products = fromWarehouse
+    ? state.products.filter((p) => p.order_id !== orderId)
+    : state.products;
+
+  return { state: { ...state, orders, drivers, products, order_offers } };
+}
+
+export function advanceOrder(
+  state: DemoState,
+  orderId: string,
+  actorId: string,
+  action: "picked_up" | "at_warehouse" | "in_transit" | "arrived",
+): { state: DemoState; error?: string } {
+  const order = state.orders.find((o) => o.id === orderId);
+  if (!order) return { state, error: "Order not found" };
+  const isDriver =
+    order.assigned_driver_id === actorId ||
+    order.long_distance_driver_id === actorId ||
+    state.profiles.find((p) => p.id === actorId)?.role === "admin";
+  if (!isDriver) return { state, error: "Only the driver can do this" };
+
+  const statusMap: Record<string, OrderStatus> = {
+    picked_up: "picked_up",
+    at_warehouse: "at_warehouse",
+    in_transit: "in_transit",
+    arrived: "awaiting_confirmation",
+  };
+
+  let drivers = state.drivers;
+  if (action === "at_warehouse" && order.assigned_driver_id) {
+    drivers = drivers.map((d) =>
+      d.id === order.assigned_driver_id ? { ...d, is_busy: false } : d,
+    );
+  }
+
+  const orders = state.orders.map((o) =>
+    o.id === orderId ? { ...o, status: statusMap[action] } : o,
+  );
+
+  // Package physically enters the hub: track it as a warehouse product, with
+  // the driver who brought it in kept on the shelf record.
+  let products = state.products;
+  if (action === "at_warehouse" && order.warehouse_id) {
+    const handedInBy = order.assigned_driver_id;
+    const handedInName =
+      state.profiles.find((p) => p.id === handedInBy)?.full_name ?? "";
+    const already = products.some((p) => p.order_id === orderId);
+    products = already
+      ? products.map((p) =>
+          p.order_id === orderId
+            ? {
+                ...p,
+                delivered_by_driver_id: handedInBy,
+                delivered_by_name: handedInName,
+                delivered_at: p.delivered_at ?? new Date().toISOString(),
+              }
+            : p,
+        )
+      : [
+          {
+            id: uid(),
+            warehouse_id: order.warehouse_id,
+            name: order.product_description || "Package",
+            quantity: 1,
+            note: `Order ${formatOrderNumber(order.order_number)} — waiting for long-distance driver`,
+            order_id: orderId,
+            delivered_by_driver_id: handedInBy,
+            delivered_by_name: handedInName,
+            delivered_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+          },
+          ...products,
+        ];
+  }
+
+  return { state: { ...state, orders, drivers, products } };
+}
+
+export function confirmDelivery(
+  state: DemoState,
+  orderId: string,
+  userId: string,
+  who: "client" | "driver",
+  stars?: number,
+): { state: DemoState; error?: string } {
+  const order = state.orders.find((o) => o.id === orderId);
+  if (!order) return { state, error: "Order not found" };
+
+  let next = { ...order };
+  if (who === "client") {
+    if (order.client_id !== userId && state.profiles.find((p) => p.id === userId)?.role !== "admin") {
+      return { state, error: "Only the client can confirm" };
+    }
+    if (!stars || stars < 1) return { state, error: "Please rate the driver (1–5 stars)" };
+    next = { ...next, client_confirmed: true, rating_stars: stars };
+  } else {
+    const isDriver =
+      order.assigned_driver_id === userId ||
+      order.long_distance_driver_id === userId ||
+      state.profiles.find((p) => p.id === userId)?.role === "admin";
+    if (!isDriver) return { state, error: "Only the driver can confirm" };
+    next = { ...next, driver_confirmed: true };
+  }
+
+  let drivers = state.drivers;
+  if (next.client_confirmed && next.driver_confirmed) {
+    next = {
+      ...next,
+      status: "completed",
+      completed_at: new Date().toISOString(),
+    };
+    const driverId = orderLinkedDriverId(next);
+    if (driverId) {
+      drivers = drivers.map((d) => {
+        if (d.id !== driverId && d.id !== next.assigned_driver_id) return d;
+        let updated = { ...d, is_busy: false };
+        if (stars && d.id === driverId) {
+          const count = d.rating_count + 1;
+          const avg = (d.rating_avg * d.rating_count + stars) / count;
+          updated = { ...updated, rating_avg: Math.round(avg * 100) / 100, rating_count: count };
+        }
+        return updated;
+      });
+    }
+  } else {
+    next = { ...next, status: "awaiting_confirmation" };
+  }
+
+  const orders = state.orders.map((o) => (o.id === orderId ? next : o));
+  return { state: { ...state, orders, drivers } };
+}
+
+export function reportClient(
+  state: DemoState,
+  orderId: string,
+  reporterId: string,
+  reason: string,
+): { state: DemoState; error?: string } {
+  const order = state.orders.find((o) => o.id === orderId);
+  if (!order) return { state, error: "Order not found" };
+  const report: Report = {
+    id: uid(),
+    order_id: orderId,
+    reporter_id: reporterId,
+    reason,
+    status: "open",
+    created_at: new Date().toISOString(),
+  };
+  return { state: { ...state, reports: [report, ...state.reports] } };
+}
+
+export function resolveReport(
+  state: DemoState,
+  reportId: string,
+  upheld: boolean,
+): DemoState {
+  const report = state.reports.find((r) => r.id === reportId);
+  if (!report) return state;
+  const reports = state.reports.map((r) =>
+    r.id === reportId ? { ...r, status: upheld ? ("upheld" as const) : ("dismissed" as const) } : r,
+  );
+  let orders = state.orders;
+  if (upheld) {
+    orders = orders.map((o) => {
+      if (o.id !== report.order_id) return o;
+      const half = Math.round((o.delivery_fee_usd / 2) * 100) / 100;
+      return {
+        ...o,
+        dispute_50_50: true,
+        driver_cut_usd: half,
+        company_cut_usd: o.company_cut_usd,
+        status: "disputed",
+      };
+    });
+  }
+  return { ...state, reports, orders };
+}
+
+export function updateLocation(
+  state: DemoState,
+  driverId: string,
+  lat: number,
+  lng: number,
+): DemoState {
+  const exists = state.locations.some((l) => l.driver_id === driverId);
+  const locations = exists
+    ? state.locations.map((l) =>
+        l.driver_id === driverId
+          ? { ...l, lat, lng, updated_at: new Date().toISOString() }
+          : l,
+      )
+    : [
+        ...state.locations,
+        { driver_id: driverId, lat, lng, updated_at: new Date().toISOString() },
+      ];
+  return { ...state, locations };
+}
+
+export function setOnline(
+  state: DemoState,
+  driverId: string,
+  online: boolean,
+  lat?: number,
+  lng?: number,
+): { state: DemoState; error?: string } {
+  if (online && (lat == null || lng == null)) {
+    return { state, error: "Turn on location to go online" };
+  }
+  let next = ensureAdminDriver(state);
+  const hasRow = next.drivers.some((d) => d.id === driverId);
+  if (!hasRow) return { state, error: "Driver not found" };
+  const row = next.drivers.find((d) => d.id === driverId);
+  if (online && row?.banned) {
+    return { state, error: "This account is banned" };
+  }
+  if (online && row?.admin_frozen) {
+    return { state, error: "Your account is frozen by an admin" };
+  }
+  if (online && row && driverPaymentBlocked(next, row)) {
+    if (driverCompanyPayMode(row, next.settings) === "percentage") {
+      const due = driverCommissionTotals(next, driverId).dueNow;
+      return {
+        state,
+        error: `Pay yesterday's company cut ($${due.toFixed(2)}) via Whish first`,
+      };
+    }
+    if (row.subscription_status === "frozen") {
+      const penalty = next.settings.freeze_penalty_usd;
+      return {
+        state,
+        error: `Your account is frozen. Pay subscription + $${penalty} to reactivate.`,
+      };
+    }
+    return { state, error: "Pay your subscription first" };
+  }
+  next = {
+    ...next,
+    drivers: next.drivers.map((d) =>
+      d.id === driverId ? { ...d, is_online: online } : d,
+    ),
+  };
+  if (online && lat != null && lng != null) {
+    next = updateLocation(next, driverId, lat, lng);
+  }
+  return { state: next };
+}
+
+export type RequestPayOpts = {
+  source?: "api" | "manual";
+  externalId?: string;
+  kind?: WhishKind;
+  amount?: number;
+};
+
+export function driverPayDueUsd(
+  state: DemoState,
+  driver: Driver,
+): { kind: WhishKind; amount: number } {
+  if (driverCompanyPayMode(driver, state.settings) === "percentage") {
+    return {
+      kind: "commission",
+      amount: driverCommissionTotals(state, driver.id).dueNow,
+    };
+  }
+  const frozen = driver.subscription_status === "frozen";
+  return {
+    kind: "subscription",
+    amount:
+      subscriptionPriceUsd(driver.subscription_plan, state.settings) +
+      (frozen ? state.settings.freeze_penalty_usd : 0),
+  };
+}
+
+export function pendingApiWhishTx(
+  state: DemoState,
+  driverId: string,
+  kind: WhishKind,
+): WhishTx | undefined {
+  return state.whish.find(
+    (t) =>
+      t.driver_id === driverId &&
+      t.source === "api" &&
+      t.status === "pending" &&
+      t.kind === kind,
+  );
+}
+
+export function requestSubscriptionPayment(
+  state: DemoState,
+  driverId: string,
+  opts?: RequestPayOpts,
+): DemoState {
+  const paying = state.drivers.find((d) => d.id === driverId);
+  const kind: WhishKind =
+    opts?.kind ??
+    (driverCompanyPayMode(paying, state.settings) === "percentage"
+      ? "commission"
+      : "subscription");
+  const plan: SubscriptionPlan = paying?.subscription_plan ?? "monthly";
+  const frozen =
+    state.drivers.find((d) => d.id === driverId)?.subscription_status === "frozen";
+  const amount =
+    opts?.amount ??
+    (kind === "commission"
+      ? driverCommissionTotals(state, driverId).dueNow
+      : subscriptionPriceUsd(plan, state.settings) +
+        (frozen ? state.settings.freeze_penalty_usd : 0));
+  if (kind === "commission" && amount <= 0) return state;
+  const profile = state.profiles.find((p) => p.id === driverId);
+  const source = opts?.source ?? "manual";
+  const note = opts?.externalId
+    ? `Whish collect ${opts.externalId}`
+    : kind === "commission"
+      ? `Direct commission — ${profile?.full_name ?? "driver"}`
+      : `Whish Pay ${state.settings.whish_number}`;
+
+  if (source === "api") {
+    const existing = pendingApiWhishTx(state, driverId, kind);
+    if (existing) {
+      return {
+        ...state,
+        whish: state.whish.map((t) =>
+          t.id === existing.id
+            ? {
+                ...t,
+                amount_usd: amount,
+                plan: kind === "subscription" ? plan : t.plan,
+                note,
+                external_id: opts?.externalId ?? t.external_id,
+              }
+            : t,
+        ),
+      };
+    }
+  }
+
+  const tx: WhishTx = {
+    id: uid(),
+    driver_id: driverId,
+    amount_usd: amount,
+    phone_ref: profile?.phone ?? "",
+    source,
+    status: "pending",
+    kind,
+    plan: kind === "subscription" ? plan : undefined,
+    note,
+    external_id: opts?.externalId ?? null,
+    created_at: new Date().toISOString(),
+    confirmed_at: null,
+  };
+  return { ...state, whish: [tx, ...state.whish] };
+}
+
+export function confirmWhish(
+  state: DemoState,
+  txId: string,
+): DemoState {
+  const tx = state.whish.find(
+    (t) => t.id === txId || (t.external_id != null && t.external_id === txId),
+  );
+  if (!tx || tx.status === "confirmed") return state;
+  const whish = state.whish.map((t) =>
+    t.id === tx.id
+      ? { ...t, status: "confirmed" as const, confirmed_at: new Date().toISOString() }
+      : t,
+  );
+  if (tx.kind === "commission") {
+    return { ...state, whish };
+  }
+  const driver = state.drivers.find((d) => d.id === tx.driver_id);
+  const plan: SubscriptionPlan = tx.plan ?? driver?.subscription_plan ?? "monthly";
+  const currentEndsMs = driver?.subscription_ends_at
+    ? new Date(driver.subscription_ends_at).getTime()
+    : null;
+  const ends = new Date(subscriptionEndsAt(plan, currentEndsMs, Date.now())).toISOString();
+  const drivers = state.drivers.map((d) =>
+    d.id === tx.driver_id
+      ? {
+          ...d,
+          subscription_status: "active" as const,
+          subscription_ends_at: ends,
+        }
+      : d,
+  );
+  return { ...state, whish, drivers };
+}
+
+/**
+ * Transitions active → grace → frozen per driver plan. Returns the *same*
+ * state reference when nothing changed — this is called from a 5s interval,
+ * so allocating a new object every tick would re-render and re-save forever.
+ */
+export function applySubscriptionFreeze(state: DemoState): DemoState {
+  const now = Date.now();
+  let changed = false;
+  const drivers = state.drivers.map((d) => {
+    if (!d.subscription_ends_at) return d;
+    if (driverCompanyPayMode(d, state.settings) === "percentage") return d;
+    const end = new Date(d.subscription_ends_at).getTime();
+    const graceMs = subscriptionGraceMs(d.subscription_plan, state.settings);
+    const nextStatus: Driver["subscription_status"] =
+      now <= end ? "active" : now <= end + graceMs ? "grace" : "frozen";
+    if (nextStatus === d.subscription_status) return d;
+    changed = true;
+    return { ...d, subscription_status: nextStatus };
+  });
+  if (!changed) return state;
+  return { ...state, drivers };
+}
+
+export function addDocument(
+  state: DemoState,
+  userId: string,
+  doc_type: DocType,
+  file_name: string,
+  file_data?: string,
+): { state: DemoState; error?: string } {
+  const owner = state.profiles.find((p) => p.id === userId);
+  if (!owner) return { state, error: "Profile not found" };
+  if (!allowedDocTypes(owner.role).includes(doc_type)) {
+    return { state, error: "You can only upload a selfie and an ID" };
+  }
+  const documents = [
+    {
+      id: uid(),
+      driver_id: userId,
+      doc_type,
+      file_name,
+      file_data,
+      status: "pending" as const,
+      created_at: new Date().toISOString(),
+    },
+    ...state.documents.filter((d) => !(d.driver_id === userId && d.doc_type === doc_type)),
+  ];
+  return { state: { ...state, documents } };
+}
+
+export function approveDocument(
+  state: DemoState,
+  docId: string,
+  approve: boolean,
+): DemoState {
+  const documents = state.documents.map((d) =>
+    d.id === docId
+      ? { ...d, status: approve ? ("approved" as const) : ("rejected" as const) }
+      : d,
+  );
+  const doc = documents.find((d) => d.id === docId);
+  let drivers = state.drivers;
+  let notifications = state.notifications;
+  if (doc && approve) {
+    const owner = state.profiles.find((p) => p.id === doc.driver_id);
+    const required = allowedDocTypes(owner?.role);
+    const ok = required.every((t) =>
+      documents.some(
+        (d) => d.driver_id === doc.driver_id && d.doc_type === t && d.status === "approved",
+      ),
+    );
+    if (ok) {
+      drivers = drivers.map((d) =>
+        d.id === doc.driver_id ? { ...d, is_trusted: true } : d,
+      );
+      const already = notifications.some(
+        (existing) => existing.user_id === doc.driver_id && existing.kind === "docs_approved",
+      );
+      if (!already) {
+        notifications = [
+          {
+            id: uid(),
+            user_id: doc.driver_id,
+            title: "Verification complete",
+            body: "All your documents have been approved. Your account is verified.",
+            read: false,
+            created_at: new Date().toISOString(),
+            kind: "docs_approved",
+          },
+          ...notifications,
+        ];
+      }
+    }
+  }
+  return { ...state, documents, drivers, notifications };
+}
+
+export function markNotificationRead(state: DemoState, notifId: string): DemoState {
+  return markNotificationsRead(state, [notifId]);
+}
+
+export function markNotificationsRead(state: DemoState, notifIds: string[]): DemoState {
+  if (notifIds.length === 0) return state;
+  const ids = new Set(notifIds);
+  return {
+    ...state,
+    notifications: state.notifications.map((n) =>
+      ids.has(n.id) ? { ...n, read: true } : n,
+    ),
+  };
+}
+
+function notifyUser(
+  state: Pick<DemoState, "notifications">,
+  input: {
+    userId: string;
+    title: string;
+    body: string;
+    kind?: NotificationKind;
+    orderId?: string;
+  },
+): Pick<DemoState, "notifications"> {
+  const createdAt = new Date().toISOString();
+  const kind = input.kind ?? "generic";
+  const notification: Notification = {
+    id: uid(),
+    user_id: input.userId,
+    title: input.title,
+    body: input.body,
+    read: false,
+    created_at: createdAt,
+    kind,
+    order_id: input.orderId,
+  };
+  return {
+    notifications: [notification, ...state.notifications],
+  };
+}
+
+export function addCheckin(
+  state: DemoState,
+  orderId: string,
+  driverId: string,
+  status: PrivateCheckin["status"],
+  note: string,
+): DemoState {
+  const today = new Date().toISOString().slice(0, 10);
+  const checkins = [
+    {
+      id: uid(),
+      order_id: orderId,
+      driver_id: driverId,
+      check_date: today,
+      status,
+      note,
+    },
+    ...state.checkins.filter((c) => !(c.order_id === orderId && c.check_date === today)),
+  ];
+  return { ...state, checkins };
+}
+
+export function driverRevenue(
+  state: DemoState,
+  driverId: string,
+  period: "today" | "yesterday" | "week" | "month",
+): { profit: number; orders: number } {
+  const now = new Date();
+  const start = new Date(now);
+  if (period === "today") start.setHours(0, 0, 0, 0);
+  if (period === "yesterday") {
+    start.setDate(start.getDate() - 1);
+    start.setHours(0, 0, 0, 0);
+    now.setHours(0, 0, 0, 0);
+  }
+  if (period === "week") start.setDate(start.getDate() - 7);
+  if (period === "month") start.setDate(start.getDate() - 30);
+
+  const completed = state.orders.filter((o) => {
+    if (o.status !== "completed" && o.status !== "disputed") return false;
+    const did =
+      o.assigned_driver_id === driverId || o.long_distance_driver_id === driverId;
+    if (!did || !o.completed_at) return false;
+    const t = new Date(o.completed_at).getTime();
+    if (period === "yesterday") {
+      return t >= start.getTime() && t < now.getTime();
+    }
+    return t >= start.getTime();
+  });
+
+  return {
+    profit: completed.reduce((s, o) => s + o.driver_cut_usd, 0),
+    orders: completed.length,
+  };
+}
+
+export function subscriptionBudget(state: DemoState): number {
+  return state.whish
+    .filter((t) => t.status === "confirmed" && t.kind === "subscription")
+    .reduce((s, t) => s + t.amount_usd, 0);
+}
+
+export type DayProfit = {
+  /** Whish subscription payments confirmed on this day. */
+  subscription: number;
+  /** Company cut of deliveries completed on this day. */
+  percentage: number;
+  total: number;
+  orders: number;
+};
+
+/** Company profit on one calendar day — what the admin's date picker reads. */
+export function companyProfitOnDay(state: DemoState, day: Date): DayProfit {
+  const start = new Date(day);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  const inDay = (iso: string | null | undefined) => {
+    if (!iso) return false;
+    const t = new Date(iso).getTime();
+    return t >= start.getTime() && t < end.getTime();
+  };
+
+  const subscription = state.whish
+    .filter((t) => t.status === "confirmed" && t.kind === "subscription" && inDay(t.confirmed_at))
+    .reduce((sum, t) => sum + t.amount_usd, 0);
+
+  const sameDayOrders = state.orders.filter(
+    (o) => (o.status === "completed" || o.status === "disputed") && inDay(o.completed_at),
+  );
+  const percentage = sameDayOrders.reduce((sum, o) => sum + o.company_cut_usd, 0);
+
+  return {
+    subscription: Math.round(subscription * 100) / 100,
+    percentage: Math.round(percentage * 100) / 100,
+    total: Math.round((subscription + percentage) * 100) / 100,
+    orders: sameDayOrders.length,
+  };
+}
+
+export function percentageAccrued(state: DemoState): number {
+  return state.orders
+    .filter((o) => o.status === "completed" || o.status === "disputed")
+    .reduce((s, o) => s + o.company_cut_usd, 0);
+}
+
+function earningDriverId(order: Order): string | null {
+  return order.long_distance_driver_id ?? order.assigned_driver_id;
+}
+
+/** Previous Beirut work day (and older unpaid cuts) vs current 07:00→07:00 accruals. */
+export function driverCommissionTotals(
+  state: DemoState,
+  driverId: string,
+  at: Date = new Date(),
+): { dueNow: number; accruingToday: number } {
+  const startMs = workDayStart(at).getTime();
+  let due = 0;
+  let accruing = 0;
+  for (const o of state.orders) {
+    if (o.status !== "completed" && o.status !== "disputed") continue;
+    if (earningDriverId(o) !== driverId || !o.completed_at) continue;
+    const t = new Date(o.completed_at).getTime();
+    if (classifyCommissionCut(t, startMs) === "due") due += o.company_cut_usd;
+    else accruing += o.company_cut_usd;
+  }
+  const paid = state.whish
+    .filter(
+      (tx) =>
+        tx.driver_id === driverId &&
+        tx.status === "confirmed" &&
+        tx.kind === "commission",
+    )
+    .reduce((s, tx) => s + tx.amount_usd, 0);
+  return {
+    dueNow: commissionDueNowUsd(due, paid),
+    accruingToday: Math.round(accruing * 100) / 100,
+  };
+}
+
+export function declineOffer(
+  state: DemoState,
+  orderId: string,
+  driverId: string,
+): { state: DemoState; error?: string } {
+  const order = state.orders.find((o) => o.id === orderId);
+  if (!order) return { state, error: "Order not found" };
+  const claimable =
+    order.status === "pending" ||
+    (order.order_type === "long_distance" && order.status === "at_warehouse");
+  if (!claimable) {
+    return { state, error: "This order is no longer available" };
+  }
+  const declinedOffers = state.declined_offers ?? [];
+  const alreadyLegacy = declinedOffers.some(
+    (d) => d.driver_id === driverId && d.order_id === orderId,
+  );
+  const order_offers = (state.order_offers ?? []).map((offer) =>
+    offer.order_id === orderId && offer.driver_id === driverId
+      ? { ...offer, status: "declined" as const }
+      : offer,
+  );
+  return {
+    state: {
+      ...state,
+      order_offers,
+      declined_offers: alreadyLegacy
+        ? declinedOffers
+        : [...declinedOffers, { driver_id: driverId, order_id: orderId }],
+    },
+  };
+}
+
+export function offerForDriver(
+  state: DemoState,
+  orderId: string,
+  driverId: string,
+): OrderOffer | undefined {
+  return (state.order_offers ?? []).find(
+    (offer) => offer.order_id === orderId && offer.driver_id === driverId,
+  );
+}
+
+export function availableOrdersForDriver(state: DemoState, driverId: string): Order[] {
+  const isAdmin = state.profiles.find((p) => p.id === driverId)?.role === "admin";
+  const driver = state.drivers.find((d) => d.id === driverId);
+  const offers = state.order_offers ?? [];
+
+  if (isAdmin) {
+    return state.orders.filter((o) => {
+      if (o.order_type === "long_distance" && o.status === "at_warehouse") return true;
+      return o.status === "pending";
+    });
+  }
+
+  if (!driver || !driver.is_online) return [];
+  if (driver.banned || driver.admin_frozen) return [];
+  if (driverPaymentBlocked(state, driver)) return [];
+
+  const offeredIds = new Set(
+    offers
+      .filter((offer) => offer.driver_id === driverId && offer.status === "offered")
+      .map((offer) => offer.order_id),
+  );
+
+  return state.orders
+    .filter((o) => o.status === "pending" && offeredIds.has(o.id))
+    .toSorted((a, b) => {
+      // Urgent orders are what the client paid triple for: they head the list,
+      // then the nearest pickup wins.
+      if (a.is_urgent !== b.is_urgent) return a.is_urgent ? -1 : 1;
+      const oa = offerForDriver(state, a.id, driverId);
+      const ob = offerForDriver(state, b.id, driverId);
+      return (oa?.to_pickup_km ?? 0) - (ob?.to_pickup_km ?? 0);
+    });
+}
+
+function driverActiveCount(state: DemoState, driverId: string): number {
+  return state.orders.filter(
+    (o) =>
+      (o.assigned_driver_id === driverId || o.long_distance_driver_id === driverId) &&
+      !["completed", "cancelled"].includes(o.status),
+  ).length;
+}
+
+export function isDispatchEligible(state: DemoState, driver: Driver): boolean {
+  if (!driver.is_online || driver.is_busy) return false;
+  if (driver.banned || driver.admin_frozen) return false;
+  if (driverPaymentBlocked(state, driver)) return false;
+  if (state.profiles.find((p) => p.id === driver.id)?.role === "admin") return false;
+  if (!state.locations.some((l) => l.driver_id === driver.id)) return false;
+  return canAcceptAnotherOrder(
+    driver.driver_type,
+    driverActiveCount(state, driver.id),
+    state.settings.max_active_orders,
+  );
+}
+
+export function dispatchDriverPoints(
+  state: DemoState,
+): { id: string; lat: number; lng: number }[] {
+  return state.drivers.flatMap((driver) => {
+    if (!isDispatchEligible(state, driver)) return [];
+    const loc = state.locations.find((l) => l.driver_id === driver.id);
+    if (!loc) return [];
+    return [{ id: driver.id, lat: loc.lat, lng: loc.lng }];
+  });
+}
+
+export function pendingDispatchOrders(state: DemoState): Order[] {
+  return state.orders.filter((o) => o.status === "pending");
+}
+
+/** In-app now. Replace the body later with FCM / APNs. */
+export function notifyOrderOffered(state: DemoState, driverId: string, order: Order): DemoState {
+  const { notifications } = notifyUser(state, {
+    userId: driverId,
+    title: "New nearby order",
+    body: `${formatOrderNumber(order.order_number)} is waiting near you`,
+    kind: "order_offered",
+    orderId: order.id,
+  });
+  return { ...state, notifications };
+}
+
+function dispatchTimeoutMs(settings: CompanySettings): number {
+  const seconds = settings.dispatch_offer_timeout_sec ?? 60;
+  return Math.max(1, seconds) * 1000;
+}
+
+function offerRoundExpired(
+  order: Order,
+  offers: OrderOffer[],
+  now: Date,
+  timeoutMs: number,
+): boolean {
+  if (offers.length === 0) return false;
+  if (offers.some((offer) => offer.status === "accepted")) return false;
+  const stamp = order.offered_at ?? offers.map((offer) => offer.offered_at).toSorted()[0];
+  if (!stamp) return false;
+  return now.getTime() - new Date(stamp).getTime() >= timeoutMs;
+}
+
+function assignDispatchRing(
+  state: DemoState,
+  order: Order,
+  legs: DriverLeg[],
+  opts: { retry: boolean; now: Date },
+): DemoState {
+  const declined = opts.retry
+    ? new Set<string>()
+    : new Set(
+        (state.order_offers ?? [])
+          .filter((offer) => offer.order_id === order.id && offer.status === "declined")
+          .map((offer) => offer.driver_id),
+      );
+  const eligibleIds = new Set(
+    state.drivers
+      .filter((driver) => isDispatchEligible(state, driver) && !declined.has(driver.id))
+      .map((driver) => driver.id),
+  );
+  const eligibleLegs = legs.filter((leg) => eligibleIds.has(leg.driverId));
+  if (eligibleLegs.length === 0) return state;
+
+  const initial = state.settings.dispatch_initial_radius_km ?? 2;
+  const growth = state.settings.dispatch_radius_growth ?? 1.5;
+  let start = initial;
+  if (opts.retry && order.dispatch_radius_km != null) {
+    const stillInside = eligibleLegs.some((leg) => leg.toPickupKm <= order.dispatch_radius_km!);
+    start = stillInside ? order.dispatch_radius_km : initial;
+  }
+
+  const ring = expandDispatchRadius(
+    eligibleLegs.map((leg) => leg.toPickupKm),
+    start,
+    growth,
+  );
+  if (!ring) return state;
+
+  const inside = driversInsideRadius(eligibleLegs, ring.radiusKm);
+  const offeredAt = opts.now.toISOString();
+  const previous = (state.order_offers ?? []).filter((offer) => offer.order_id === order.id);
+  const newOffers: OrderOffer[] = inside.map((leg) => ({
+    order_id: order.id,
+    driver_id: leg.driverId,
+    to_pickup_km: leg.toPickupKm,
+    to_dropoff_km: leg.toDropoffKm,
+    radius_km: ring.radiusKm,
+    offered_at: offeredAt,
+    status: "offered",
+  }));
+
+  let next: DemoState = {
+    ...state,
+    order_offers: [
+      ...(state.order_offers ?? []).filter((offer) => offer.order_id !== order.id),
+      ...newOffers,
+    ],
+    declined_offers: opts.retry
+      ? (state.declined_offers ?? []).filter((row) => row.order_id !== order.id)
+      : state.declined_offers,
+    orders: state.orders.map((row) =>
+      row.id === order.id
+        ? { ...row, dispatch_radius_km: ring.radiusKm, offered_at: offeredAt }
+        : row,
+    ),
+  };
+
+  for (const offer of newOffers) {
+    const before = previous.find((row) => row.driver_id === offer.driver_id);
+    if (!before || before.status === "declined") {
+      next = notifyOrderOffered(next, offer.driver_id, order);
+    }
+  }
+  return next;
+}
+
+function addDriversToCurrentRing(
+  state: DemoState,
+  order: Order,
+  legs: DriverLeg[],
+  now: Date,
+): DemoState {
+  const radius = order.dispatch_radius_km;
+  if (radius == null) {
+    return assignDispatchRing(state, order, legs, { retry: false, now });
+  }
+  const existing = new Set(
+    (state.order_offers ?? [])
+      .filter((offer) => offer.order_id === order.id)
+      .map((offer) => offer.driver_id),
+  );
+  const eligibleIds = new Set(
+    state.drivers
+      .filter((driver) => isDispatchEligible(state, driver) && !existing.has(driver.id))
+      .map((driver) => driver.id),
+  );
+  const newcomers = driversInsideRadius(
+    legs.filter((leg) => eligibleIds.has(leg.driverId)),
+    radius,
+  );
+  if (newcomers.length === 0) return state;
+
+  const offeredAt = order.offered_at ?? now.toISOString();
+  const added: OrderOffer[] = newcomers.map((leg) => ({
+    order_id: order.id,
+    driver_id: leg.driverId,
+    to_pickup_km: leg.toPickupKm,
+    to_dropoff_km: leg.toDropoffKm,
+    radius_km: radius,
+    offered_at: offeredAt,
+    status: "offered",
+  }));
+
+  let next: DemoState = {
+    ...state,
+    order_offers: [...(state.order_offers ?? []), ...added],
+  };
+  for (const offer of added) {
+    next = notifyOrderOffered(next, offer.driver_id, order);
+  }
+  return next;
+}
+
+export function reconcileOrderDispatch(
+  state: DemoState,
+  orderId: string,
+  legs: DriverLeg[],
+  now: Date = new Date(),
+): DemoState {
+  const order = state.orders.find((row) => row.id === orderId);
+  if (!order || order.status !== "pending") return state;
+  const offers = (state.order_offers ?? []).filter((offer) => offer.order_id === orderId);
+  const timedOut = offerRoundExpired(order, offers, now, dispatchTimeoutMs(state.settings));
+  if (offers.length === 0 || timedOut) {
+    return assignDispatchRing(state, order, legs, { retry: timedOut, now });
+  }
+  return addDriversToCurrentRing(state, order, legs, now);
+}
+
+export function tickDispatch(
+  state: DemoState,
+  legsByOrder: Map<string, DriverLeg[]>,
+  now: Date = new Date(),
+): DemoState {
+  let next = state;
+  for (const order of state.orders.filter((row) => row.status === "pending")) {
+    next = reconcileOrderDispatch(next, order.id, legsByOrder.get(order.id) ?? [], now);
+  }
+  return next;
+}
+
+export function updateProfile(
+  state: DemoState,
+  actorId: string | null | undefined,
+  userId: string,
+  input: {
+    full_name?: string;
+    phone?: string;
+    email?: string;
+    business_name?: string;
+    business_address?: string;
+    business_lat?: number;
+    business_lng?: number;
+    avatar_url?: string;
+  },
+): { state: DemoState; error?: string } {
+  const profile = state.profiles.find((p) => p.id === userId);
+  if (!profile) return { state, error: "Profile not found" };
+  const actor = state.profiles.find((p) => p.id === actorId);
+  if (actorId !== userId && actor?.role !== "admin") {
+    return { state, error: "Not allowed to edit this profile" };
+  }
+  if (
+    input.email &&
+    state.profiles.some(
+      (p) => p.id !== userId && p.email.toLowerCase() === input.email!.toLowerCase(),
+    )
+  ) {
+    return { state, error: "This email is already used" };
+  }
+  if (
+    input.phone &&
+    state.profiles.some((p) => p.id !== userId && digits(p.phone) === digits(input.phone!))
+  ) {
+    return { state, error: "This phone number is already used" };
+  }
+  const profiles = state.profiles.map((p) =>
+    p.id === userId
+      ? {
+          ...p,
+          ...(input.full_name != null ? { full_name: input.full_name } : {}),
+          ...(input.phone != null ? { phone: input.phone } : {}),
+          ...(input.email != null ? { email: input.email.toLowerCase() } : {}),
+          ...(input.business_name != null ? { business_name: input.business_name } : {}),
+          ...(input.business_address != null
+            ? {
+                business_address: locationLabel(
+                  input.business_address,
+                  input.business_lat ?? p.business_lat,
+                  input.business_lng ?? p.business_lng,
+                ),
+              }
+            : {}),
+          ...(input.business_lat != null ? { business_lat: input.business_lat } : {}),
+          ...(input.business_lng != null ? { business_lng: input.business_lng } : {}),
+          ...(input.avatar_url != null ? { avatar_url: input.avatar_url } : {}),
+        }
+      : p,
+  );
+  return { state: { ...state, profiles } };
+}
+
+export function setDriverRevenueMode(
+  state: DemoState,
+  driverId: string,
+  revenue_mode: RevenueMode,
+): { state: DemoState; error?: string } {
+  const driver = state.drivers.find((d) => d.id === driverId);
+  if (!driver) return { state, error: "Driver not found" };
+  const drivers = state.drivers.map((d) =>
+    d.id === driverId ? { ...d, revenue_mode } : d,
+  );
+  return { state: applySubscriptionFreeze({ ...state, drivers }) };
+}
+
+export function setDriverSubscriptionPlan(
+  state: DemoState,
+  driverId: string,
+  plan: SubscriptionPlan,
+): { state: DemoState; error?: string } {
+  const driver = state.drivers.find((d) => d.id === driverId);
+  if (!driver) return { state, error: "Driver not found" };
+  const drivers = state.drivers.map((d) =>
+    d.id === driverId ? { ...d, subscription_plan: plan } : d,
+  );
+  return { state: applySubscriptionFreeze({ ...state, drivers }) };
+}
+
+export function updateBusinessOrderCosts(
+  state: DemoState,
+  businessId: string,
+  input: BusinessOrderCosts,
+): { state: DemoState; error?: string } {
+  const profile = state.profiles.find((p) => p.id === businessId);
+  if (!profile || profile.role !== "business") {
+    return { state, error: "Business not found" };
+  }
+  const costs = {
+    order_min_usd: Number(input.order_min_usd),
+    order_max_usd: Number(input.order_max_usd),
+    order_min_lbp: roundLbp(Number(input.order_min_lbp)),
+    order_max_lbp: roundLbp(Number(input.order_max_lbp)),
+  };
+  const err = validateBusinessOrderCosts(costs);
+  if (err) return { state, error: err };
+  const profiles = state.profiles.map((p) => (p.id === businessId ? { ...p, ...costs } : p));
+  return { state: { ...state, profiles } };
+}
+
+export type ProfitBucket = { label: string; profit: number; orders: number };
+
+/** Bars inside one period: 3-hour buckets for a single day, daily bars otherwise. */
+export function driverDailyProfit(
+  state: DemoState,
+  driverId: string,
+  period: "today" | "yesterday" | "week" | "month",
+): ProfitBucket[] {
+  const dayStart = (offset: number) => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + offset);
+    return d;
+  };
+
+  const completed = state.orders.filter((o) => {
+    if (o.status !== "completed" && o.status !== "disputed") return false;
+    if (!o.completed_at) return false;
+    return o.assigned_driver_id === driverId || o.long_distance_driver_id === driverId;
+  });
+
+  const sumRange = (from: number, to: number): { profit: number; orders: number } => {
+    let profit = 0;
+    let orders = 0;
+    for (const o of completed) {
+      const t = new Date(o.completed_at!).getTime();
+      if (t >= from && t < to) {
+        profit += o.driver_cut_usd;
+        orders += 1;
+      }
+    }
+    return { profit: Math.round(profit * 100) / 100, orders };
+  };
+
+  if (period === "today" || period === "yesterday") {
+    const start = dayStart(period === "today" ? 0 : -1);
+    return Array.from({ length: 8 }, (_, i) => {
+      const from = start.getTime() + i * 3 * 60 * 60 * 1000;
+      const to = from + 3 * 60 * 60 * 1000;
+      const hour = i * 3;
+      return { label: `${String(hour).padStart(2, "0")}:00`, ...sumRange(from, to) };
+    });
+  }
+
+  const days = period === "week" ? 7 : 30;
+  return Array.from({ length: days }, (_, i) => {
+    const from = dayStart(i - days + 1);
+    const to = dayStart(i - days + 2);
+    const label = from.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    return { label, ...sumRange(from.getTime(), to.getTime()) };
+  });
+}
+
+/** Client cancels their own order (only before pickup). */
+export function cancelOrder(
+  state: DemoState,
+  orderId: string,
+  clientId: string,
+): { state: DemoState; error?: string } {
+  const order = state.orders.find((o) => o.id === orderId);
+  if (!order) return { state, error: "Order not found" };
+  if (order.client_id !== clientId) return { state, error: "This is not your order" };
+  if (!["pending", "accepted"].includes(order.status)) {
+    return { state, error: "This order can no longer be cancelled" };
+  }
+  const orders = state.orders.map((o) =>
+    o.id === orderId ? { ...o, status: "cancelled" as OrderStatus } : o,
+  );
+  const drivers = state.drivers.map((d) =>
+    d.id === order.assigned_driver_id || d.id === order.long_distance_driver_id
+      ? { ...d, is_busy: false }
+      : d,
+  );
+
+  const driverIds = [
+    ...new Set(
+      [order.assigned_driver_id, order.long_distance_driver_id].filter(
+        (id): id is string => !!id,
+      ),
+    ),
+  ];
+  let notifications = state.notifications;
+  if (order.status === "accepted" && driverIds.length > 0) {
+    const title = "Order cancelled";
+    const body = `The client cancelled order ${formatOrderNumber(order.order_number)}. You are free to take other jobs.`;
+    for (const driverId of driverIds) {
+      const next = notifyUser(
+        { notifications },
+        {
+          userId: driverId,
+          title,
+          body,
+          kind: "order_cancelled",
+          orderId: order.id,
+        },
+      );
+      notifications = next.notifications;
+    }
+  }
+
+  return { state: { ...state, orders, drivers, notifications } };
+}
+
+export function rejectOrder(
+  state: DemoState,
+  orderId: string,
+): { state: DemoState; error?: string } {
+  const order = state.orders.find((o) => o.id === orderId);
+  if (!order) return { state, error: "Order not found" };
+  if (!["pending", "at_warehouse"].includes(order.status)) {
+    return { state, error: "Only waiting orders can be rejected" };
+  }
+  const orders = state.orders.map((o) =>
+    o.id === orderId ? { ...o, status: "cancelled" as OrderStatus } : o,
+  );
+  // Free the fast driver and clear any hub product tied to this order.
+  const drivers = state.drivers.map((d) =>
+    d.id === order.assigned_driver_id ? { ...d, is_busy: false } : d,
+  );
+  const products = state.products.filter((p) => p.order_id !== orderId);
+  return { state: { ...state, orders, drivers, products } };
+}
+
+/** The founder account, which no admin can remove. */
+export function isProtectedAdmin(profile: Pick<Profile, "phone">): boolean {
+  return digits(profile.phone) === digits(PROTECTED_ADMIN_PHONE);
+}
+
+export function adminProfiles(state: DemoState): Profile[] {
+  return state.profiles
+    .filter((p) => p.role === "admin")
+    .toSorted((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
+export function addAdmin(
+  state: DemoState,
+  input: { full_name: string; email: string; phone: string; password: string },
+): { state: DemoState; error?: string } {
+  const full_name = input.full_name.trim();
+  if (full_name.length < 2) return { state, error: "Enter the admin's name" };
+  if (input.password.length < 6) {
+    return { state, error: "Password must be at least 6 characters" };
+  }
+  if (state.profiles.some((p) => p.email.toLowerCase() === input.email.trim().toLowerCase())) {
+    return { state, error: "This email is already used" };
+  }
+  if (state.profiles.some((p) => digits(p.phone) === digits(input.phone))) {
+    return { state, error: "This phone number is already used" };
+  }
+  const profile: Profile = {
+    id: uid(),
+    full_name,
+    email: input.email.trim().toLowerCase(),
+    phone: input.phone.trim(),
+    password: input.password,
+    role: "admin",
+    created_at: new Date().toISOString(),
+  };
+  // ensureAdminDriver gives every admin the owner driver row that lets them
+  // work orders from the driver view.
+  return { state: ensureAdminDriver({ ...state, profiles: [...state.profiles, profile] }) };
+}
+
+export function removeAdmin(
+  state: DemoState,
+  adminId: string,
+): { state: DemoState; error?: string } {
+  const target = state.profiles.find((p) => p.id === adminId);
+  if (!target || target.role !== "admin") return { state, error: "Admin not found" };
+  if (isProtectedAdmin(target)) {
+    return { state, error: "The main Direct admin cannot be removed" };
+  }
+  if (adminId === state.sessionUserId) {
+    return { state, error: "You cannot remove your own account" };
+  }
+  if (adminProfiles(state).length <= 1) {
+    return { state, error: "Direct needs at least one admin" };
+  }
+  // Removing them would leave an order pointing at a driver who no longer
+  // exists, so the work has to be handed over first.
+  const stillWorking = state.orders.some(
+    (o) =>
+      (o.assigned_driver_id === adminId || o.long_distance_driver_id === adminId) &&
+      !["completed", "cancelled", "disputed"].includes(o.status),
+  );
+  if (stillWorking) {
+    return { state, error: "This admin is still on an active order" };
+  }
+  return {
+    state: {
+      ...state,
+      profiles: state.profiles.filter((p) => p.id !== adminId),
+      drivers: state.drivers.filter((d) => d.id !== adminId),
+      locations: state.locations.filter((l) => l.driver_id !== adminId),
+      documents: state.documents.filter((d) => d.driver_id !== adminId),
+      notifications: state.notifications.filter((n) => n.user_id !== adminId),
+    },
+  };
+}
+
+export function addDriver(
+  state: DemoState,
+  input: {
+    full_name: string;
+    email: string;
+    phone: string;
+    password: string;
+    driver_type?: DriverType;
+  },
+): { state: DemoState; error?: string } {
+  if (state.profiles.some((p) => p.email.toLowerCase() === input.email.toLowerCase())) {
+    return { state, error: "This email is already used" };
+  }
+  if (state.profiles.some((p) => digits(p.phone) === digits(input.phone))) {
+    return { state, error: "This phone number is already used" };
+  }
+  const id = uid();
+  return {
+    state: {
+      ...state,
+      profiles: [
+        ...state.profiles,
+        {
+          id,
+          full_name: input.full_name,
+          email: input.email.toLowerCase(),
+          phone: input.phone,
+          password: input.password,
+          role: "driver",
+          created_at: new Date().toISOString(),
+        },
+      ],
+      drivers: [
+        ...state.drivers,
+        {
+          id,
+          driver_type: "fast",
+          is_online: false,
+          is_busy: false,
+          is_trusted: false,
+          rating_avg: 5,
+          rating_count: 0,
+          subscription_status: "active",
+          subscription_ends_at: daysFromNow(30),
+          subscription_plan: "monthly",
+          admin_frozen: false,
+          banned: false,
+          payment_waived: false,
+          revenue_mode: state.settings.revenue_mode,
+        },
+      ],
+      locations: [
+        ...state.locations,
+        { driver_id: id, lat: 33.8938, lng: 35.5018, updated_at: new Date().toISOString() },
+      ],
+    },
+  };
+}
+
+export type DriverAccountAction = "freeze" | "unfreeze" | "ban" | "unban";
+
+export function setDriverAccountAction(
+  state: DemoState,
+  driverId: string,
+  action: DriverAccountAction,
+): { state: DemoState; error?: string } {
+  const profile = state.profiles.find((p) => p.id === driverId);
+  if (profile?.role === "admin") {
+    return { state, error: "Cannot freeze or ban the admin account" };
+  }
+  const driver = state.drivers.find((d) => d.id === driverId);
+  if (!driver) return { state, error: "Driver not found" };
+
+  const nextFlags = {
+    admin_frozen: driver.admin_frozen,
+    banned: driver.banned,
+    is_online: driver.is_online,
+    payment_waived: driver.payment_waived,
+  };
+  let title = "";
+  let body = "";
+  let kind: NotificationKind = "generic";
+
+  if (action === "freeze") {
+    nextFlags.admin_frozen = true;
+    nextFlags.is_online = false;
+    kind = "account_frozen";
+    title = "Account frozen";
+    body = "An admin froze your account. You cannot take orders until they unfreeze it.";
+  } else if (action === "unfreeze") {
+    nextFlags.admin_frozen = false;
+    if (driver.subscription_status === "frozen") {
+      nextFlags.payment_waived = true;
+    }
+    kind = "account_unfrozen";
+    title = "Account unfrozen";
+    body = "An admin unfroze your account. You can go online and take orders again.";
+  } else if (action === "ban") {
+    nextFlags.banned = true;
+    nextFlags.is_online = false;
+    kind = "account_banned";
+    title = "Account banned";
+    body = "Your driver account has been banned. Contact Direct if you think this is a mistake.";
+  } else {
+    nextFlags.banned = false;
+    kind = "account_reinstated";
+    title = "Account reinstated";
+    body = "Your ban has been lifted. You can go online again.";
+  }
+
+  return {
+    state: {
+      ...state,
+      drivers: state.drivers.map((d) => (d.id === driverId ? { ...d, ...nextFlags } : d)),
+      notifications: [
+        {
+          id: uid(),
+          user_id: driverId,
+          title,
+          body,
+          read: false,
+          created_at: new Date().toISOString(),
+          kind,
+        },
+        ...state.notifications,
+      ],
+    },
+  };
+}
+
+export function setDriverPaymentWaived(
+  state: DemoState,
+  driverId: string,
+  waived: boolean,
+): { state: DemoState; error?: string } {
+  const profile = state.profiles.find((p) => p.id === driverId);
+  if (profile?.role === "admin") {
+    return { state, error: "Cannot change payment access on the admin account" };
+  }
+  const driver = state.drivers.find((d) => d.id === driverId);
+  if (!driver) return { state, error: "Driver not found" };
+
+  return {
+    state: {
+      ...state,
+      drivers: state.drivers.map((d) =>
+        d.id === driverId ? { ...d, payment_waived: waived } : d,
+      ),
+      notifications: [
+        {
+          id: uid(),
+          user_id: driverId,
+          title: waived ? "Payment not required" : "Payment required again",
+          body: waived
+            ? "An admin allowed you to keep working even if subscription or commission is unpaid."
+            : "An admin restored the payment requirement. Pay to keep taking orders.",
+          read: false,
+          created_at: new Date().toISOString(),
+          kind: waived ? "payment_waived" : "payment_required",
+        },
+        ...state.notifications,
+      ],
+    },
+  };
+}
+
+export function addWarehouse(
+  state: DemoState,
+  input: { name: string; address: string; lat: number; lng: number },
+): DemoState {
+  const warehouse: Warehouse = {
+    id: uid(),
+    ...input,
+    address: locationLabel(input.address, input.lat, input.lng),
+  };
+  return { ...state, warehouses: [...state.warehouses, warehouse] };
+}
+
+export function updateWarehouse(
+  state: DemoState,
+  warehouseId: string,
+  input: { name: string; address: string; lat: number; lng: number },
+): { state: DemoState; error?: string } {
+  if (!state.warehouses.some((w) => w.id === warehouseId)) {
+    return { state, error: "Warehouse not found" };
+  }
+  const name = input.name.trim();
+  if (name.length < 2) return { state, error: "Enter a warehouse name" };
+  if (!Number.isFinite(input.lat) || !Number.isFinite(input.lng)) {
+    return { state, error: "Pin the warehouse on the map" };
+  }
+  return {
+    state: {
+      ...state,
+      warehouses: state.warehouses.map((w) =>
+        w.id === warehouseId
+          ? {
+              ...w,
+              name,
+              address: locationLabel(input.address, input.lat, input.lng),
+              lat: input.lat,
+              lng: input.lng,
+            }
+          : w,
+      ),
+    },
+  };
+}
+
+export function removeWarehouse(
+  state: DemoState,
+  warehouseId: string,
+): { state: DemoState; error?: string } {
+  const inUse = state.orders.some(
+    (o) =>
+      o.warehouse_id === warehouseId &&
+      !["completed", "cancelled", "disputed"].includes(o.status),
+  );
+  if (inUse) return { state, error: "An active order still goes through this warehouse" };
+  return {
+    state: {
+      ...state,
+      warehouses: state.warehouses.filter((w) => w.id !== warehouseId),
+      products: state.products.filter((p) => p.warehouse_id !== warehouseId),
+    },
+  };
+}
+
+export function addWarehouseProduct(
+  state: DemoState,
+  input: { warehouse_id: string; name: string; quantity: number; note?: string },
+): DemoState {
+  const product: WarehouseProduct = {
+    id: uid(),
+    warehouse_id: input.warehouse_id,
+    name: input.name,
+    quantity: input.quantity,
+    note: input.note ?? "",
+    order_id: null,
+    delivered_by_driver_id: null,
+    delivered_by_name: "",
+    delivered_at: null,
+    created_at: new Date().toISOString(),
+  };
+  return { ...state, products: [product, ...state.products] };
+}
+
+export function removeWarehouseProduct(state: DemoState, productId: string): DemoState {
+  return { ...state, products: state.products.filter((p) => p.id !== productId) };
+}
+
+/** Selfie (if uploaded) is the driver's profile photo; otherwise `avatar_url`. */
+export function profilePhotoUrl(state: DemoState, userId: string): string | undefined {
+  const avatar = state.profiles.find((p) => p.id === userId)?.avatar_url;
+  if (avatar) return avatar;
+  const selfie = state.documents.find(
+    (d) =>
+      d.driver_id === userId &&
+      d.doc_type === "selfie" &&
+      d.file_data &&
+      d.status !== "rejected",
+  );
+  return selfie?.file_data;
+}
+
+/** Name and phone only — never email, address, or account internals. */
+export type PublicContact = {
+  id: string;
+  full_name: string;
+  phone: string;
+};
+
+export function toPublicContact(profile: Profile | null | undefined): PublicContact | null {
+  if (!profile) return null;
+  return { id: profile.id, full_name: profile.full_name, phone: profile.phone };
+}
+
+/** Every order owned by this client/business — the one ownership rule, in one place. */
+export function ordersForOwner(state: DemoState, ownerId: string): Order[] {
+  return state.orders.filter((o) => o.client_id === ownerId);
+}
+
+export function orderLinkedDriverId(
+  order: Pick<Order, "assigned_driver_id" | "long_distance_driver_id">,
+): string | null {
+  return order.long_distance_driver_id ?? order.assigned_driver_id;
+}
+
+export function viewerIsLinkedDriver(
+  order: Pick<Order, "assigned_driver_id" | "long_distance_driver_id">,
+  viewerId: string,
+): boolean {
+  return order.assigned_driver_id === viewerId || order.long_distance_driver_id === viewerId;
+}
+
+/**
+ * What a client/business may know about the driver on their order.
+ * Shared only after a driver accepts. Admins stay invisible unless the client
+ * explicitly ordered the Direct team.
+ */
+export function publicDriverInfo(
+  state: DemoState,
+  order: Order,
+): { kind: "none" | "direct" | "driver"; contact: PublicContact | null } {
+  const driverId = orderLinkedDriverId(order);
+  if (!driverId) return { kind: "none", contact: null };
+  const profile = state.profiles.find((p) => p.id === driverId) ?? null;
+  const isAdmin = profile?.role === "admin";
+  if (order.order_type === "owner") {
+    return { kind: "direct", contact: toPublicContact(profile) };
+  }
+  if (isAdmin) {
+    return { kind: "driver", contact: null };
+  }
+  return { kind: "driver", contact: toPublicContact(profile) };
+}
+
+/** What an assigned driver may know about the client on this order. */
+export function publicClientInfo(
+  state: DemoState,
+  order: Order,
+  viewerId: string,
+): PublicContact | null {
+  const viewer = state.profiles.find((p) => p.id === viewerId);
+  if (!viewerIsLinkedDriver(order, viewerId) && viewer?.role !== "admin") {
+    return null;
+  }
+  return toPublicContact(state.profiles.find((p) => p.id === order.client_id));
+}
+
+/** Short label for client/business surfaces and map markers. */
+export function publicDriverLabel(
+  state: DemoState,
+  order: Order,
+  copy: { waiting: string; directTeam: string; yourDriver: string },
+): string {
+  const info = publicDriverInfo(state, order);
+  if (info.kind === "none") return copy.waiting;
+  if (info.kind === "direct") return copy.directTeam;
+  return info.contact?.full_name ?? copy.yourDriver;
+}

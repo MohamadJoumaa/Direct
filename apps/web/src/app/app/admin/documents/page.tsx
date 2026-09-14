@@ -8,11 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
-import { profilePhotoUrl } from "@/lib/demo-store";
+import { allowedDocTypes, profilePhotoUrl } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
-
-const DOC_TYPE_ORDER = ["selfie", "id", "vehicle_registration", "driver_license"] as const;
 
 export default function AdminDocumentsPage() {
   const { isAdmin, user } = useAuth();
@@ -32,18 +30,22 @@ export default function AdminDocumentsPage() {
     driver_license: dict.profile.docLicense,
   };
 
-  // Group documents by driver
-  const driverIds = [...new Set(state.documents.map((d) => d.driver_id))];
-  const driversWithDocs = driverIds.map((driverId) => {
-    const profile = state.profiles.find((p) => p.id === driverId);
-    const driver = state.drivers.find((d) => d.id === driverId);
-    const docs = state.documents.filter((d) => d.driver_id === driverId);
-    return { driverId, profile, driver, docs };
+  // Group documents by the account that uploaded them — drivers, but also
+  // clients and businesses, who submit a selfie and an ID.
+  const ownerIds = [...new Set(state.documents.map((d) => d.driver_id))];
+  const accountsWithDocs = ownerIds.map((ownerId) => {
+    const profile = state.profiles.find((p) => p.id === ownerId);
+    const docs = state.documents.filter((d) => d.driver_id === ownerId);
+    const required = allowedDocTypes(profile?.role);
+    const verified = required.every((t) =>
+      docs.some((d) => d.doc_type === t && d.status === "approved"),
+    );
+    return { ownerId, profile, docs, required, verified };
   });
 
   return (
       <div className="flex flex-col gap-6">
-        {driversWithDocs.length === 0 ? (
+        {accountsWithDocs.length === 0 ? (
           <Card className="border-2">
             <CardContent className="py-10 text-center">
               <FileText className="mx-auto mb-3 size-10 text-muted-foreground" />
@@ -51,21 +53,24 @@ export default function AdminDocumentsPage() {
             </CardContent>
           </Card>
         ) : (
-          driversWithDocs.map(({ driverId, profile, driver, docs }) => {
+          accountsWithDocs.map(({ ownerId, profile, docs, required, verified }) => {
             const hasPending = docs.some((d) => d.status === "pending");
             return (
-              <Card key={driverId} className="border-2">
+              <Card key={ownerId} className="border-2">
                 <CardHeader>
                   <div className="flex flex-wrap items-center gap-3">
                     <ProfilePhoto
-                      src={profilePhotoUrl(state, driverId)}
-                      name={profile?.full_name ?? "Driver"}
+                      src={profilePhotoUrl(state, ownerId)}
+                      name={profile?.full_name ?? "—"}
                       className="size-12"
                     />
                     <div className="min-w-0">
-                      <CardTitle className="flex items-center gap-2 text-xl">
+                      <CardTitle className="flex flex-wrap items-center gap-2 text-xl">
                         {profile?.full_name ?? "Unknown"}
-                        {driver?.is_trusted ? (
+                        {profile ? (
+                          <Badge variant="outline">{dict.roles[profile.role]}</Badge>
+                        ) : null}
+                        {verified ? (
                           <Badge variant="default" className="gap-1">
                             {dict.profile.verified}
                           </Badge>
@@ -82,7 +87,7 @@ export default function AdminDocumentsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col gap-3">
-                    {DOC_TYPE_ORDER.map((docType) => {
+                    {required.map((docType) => {
                       const doc = docs.find((d) => d.doc_type === docType);
                       if (!doc) return null;
                       return (
@@ -100,9 +105,8 @@ export default function AdminDocumentsPage() {
                                     ? "destructive"
                                     : "secondary"
                               }
-                              className="capitalize"
                             >
-                              {doc.status}
+                              {dict.docStatus[doc.status]}
                             </Badge>
                           </div>
                           <div className="flex flex-wrap items-center gap-3">

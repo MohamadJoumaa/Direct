@@ -1,3 +1,4 @@
+import type { RouteStop } from "@direct/shared";
 import type { Order, Warehouse } from "@/lib/demo-store";
 
 export type LatLng = { lat: number; lng: number };
@@ -25,7 +26,10 @@ export function activeDriverId(order: Order): string | null {
   return order.long_distance_driver_id ?? order.assigned_driver_id;
 }
 
-/** Next stop for in-app routing and Google Maps navigation. */
+/** Next stop for in-app routing and Google Maps navigation.
+ *  When `routeStops` (a driver's sequenced multi-order route) is given and
+ *  non-empty, its first stop wins — that is the actual next physical stop
+ *  when the driver holds more than one order. */
 export function nextNavStop(
   order: Pick<
     Order,
@@ -37,7 +41,13 @@ export function nextNavStop(
     | "dropoff_lng"
   >,
   warehouse?: Pick<Warehouse, "lat" | "lng"> | null,
+  routeStops?: RouteStop[],
 ): NavStop {
+  if (routeStops && routeStops.length > 0) {
+    const first = routeStops[0];
+    return { lat: first.lat, lng: first.lng, kind: first.kind };
+  }
+
   const pickup: NavStop = { lat: order.pickup_lat, lng: order.pickup_lng, kind: "pickup" };
   const dropoff: NavStop = { lat: order.dropoff_lat, lng: order.dropoff_lng, kind: "dropoff" };
 

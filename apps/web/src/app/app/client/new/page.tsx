@@ -1,13 +1,17 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CircleDot, Square } from "lucide-react";
+import { ChevronDown, ChevronUp, CircleDot, MapPin, Square, Zap } from "lucide-react";
 import {
+  URGENT_PRICE_MULTIPLIER,
+  applyUrgentPricing,
+  clientPriceError,
   formatDeliveryCash,
   quoteDeliveryPrice,
   clampQuoteToBusinessCosts,
+  scaleLbpToUsd,
   withBusinessOrderCosts,
 } from "@direct/shared";
 import { measureRouteKm } from "@/lib/route-distance";
@@ -21,7 +25,6 @@ import {
 import { OrderReceipt } from "@/components/order-receipt";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
@@ -29,20 +32,10 @@ import { useStore } from "@/lib/store-context";
 import { fmt, useI18n } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
 
-const PRESETS = [
-  {
-    label: "Hamra → Achrafieh",
-    pickup: { address: "Hamra, Beirut", lat: 33.8959, lng: 35.478 },
-    dropoff: { address: "Achrafieh, Beirut", lat: 33.8869, lng: 35.5194 },
-  },
-  {
-    label: "Verdun → Airport area",
-    pickup: { address: "Verdun, Beirut", lat: 33.875, lng: 35.485 },
-    dropoff: { address: "Beirut Airport area", lat: 33.8208, lng: 35.4883 },
-  },
-];
-
 type Point = { address: string; lat: number; lng: number };
+
+/** How much one tap of the price arrows moves the offer, in USD. */
+const PRICE_STEP_USD = 0.5;
 
 function NewOrderFallback() {
   const { dict } = useI18n();
@@ -52,6 +45,35 @@ function NewOrderFallback() {
       <div className="h-10 w-40 rounded-xl bg-muted" />
       <div className="h-64 w-full rounded-xl bg-muted" />
       <div className="h-80 w-full rounded-xl bg-muted" />
+    </div>
+  );
+}
+
+/** One of the two chosen points, shown but never edited by hand. */
+function ChosenPoint({
+  icon: Icon,
+  label,
+  value,
+  placeholder,
+}: {
+  icon: typeof CircleDot;
+  label: string;
+  value: string | null;
+  placeholder: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-base font-medium text-muted-foreground">{label}</span>
+      <div className="flex min-h-12 items-center gap-2 rounded-xl bg-muted px-3 py-2">
+        <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        <span
+          className={
+            value ? "text-base font-medium break-words" : "text-base text-muted-foreground"
+          }
+        >
+          {value ?? placeholder}
+        </span>
+      </div>
     </div>
   );
 }
@@ -68,33 +90,27 @@ export default function NewOrderPage() {
 
 function NewOrderContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { user } = useAuth();
   const { state, createOrder } = useStore();
   const { dict } = useI18n();
   const mapsAvailable = useMapsAvailable();
   const isBusiness = user?.role === "business";
-  const shopReady =
-    Boolean(isBusiness) &&
-    user != null &&
-    user.business_lat != null &&
-    user.business_lng != null &&
-    Boolean(user.business_address?.trim());
 
   const [step, setStep] = useState(1);
   const [product, setProduct] = useState("");
   const [placing, setPlacing] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [routeKm, setRouteKm] = useState<number | null>(null);
-  const [pickup, setPickup] = useState<Point>({
-    ...PRESETS[0].pickup,
-    address: searchParams.get("pickup") ?? PRESETS[0].pickup.address,
-  });
-  const [dropoff, setDropoff] = useState<Point>({
-    ...PRESETS[0].dropoff,
-    address: searchParams.get("dropoff") ?? PRESETS[0].dropoff.address,
-  });
+  const [pickup, setPickup] = useState<Point | null>(null);
+  const [dropoff, setDropoff] = useState<Point | null>(null);
   const [pinTarget, setPinTarget] = useState<"pickup" | "dropoff">("pickup");
+  const [urgent, setUrgent] = useState(false);
+  // Empty means "whatever Direct quotes" — only a typed value overrides it.
+  const [priceInput, setPriceInput] = useState("");
 
+  // The shop is a business's usual pickup, so it starts filled in — but it is
+  // only a default: the pin, the search box and "use my location" all move it
+  // exactly as they do for a client.
   useEffect(() => {
     if (
       user?.role === "business" &&
@@ -111,28 +127,81 @@ function NewOrderContent() {
     }
   }, [user]);
 
+  const pickupLat = pickup?.lat;
+  const pickupLng = pickup?.lng;
+  const dropoffLat = dropoff?.lat;
+  const dropoffLng = dropoff?.lng;
+
   useEffect(() => {
+    if (pickupLat == null || pickupLng == null || dropoffLat == null || dropoffLng == null) {
+      setRouteKm(null);
+      return;
+    }
     let cancelled = false;
     setRouteKm(null);
     void measureRouteKm(
-      { lat: pickup.lat, lng: pickup.lng },
-      { lat: dropoff.lat, lng: dropoff.lng },
+      { lat: pickupLat, lng: pickupLng },
+      { lat: dropoffLat, lng: dropoffLng },
     ).then((km) => {
       if (!cancelled) setRouteKm(km);
     });
     return () => {
       cancelled = true;
     };
-  }, [pickup.lat, pickup.lng, dropoff.lat, dropoff.lng]);
+  }, [pickupLat, pickupLng, dropoffLat, dropoffLng]);
 
   const distanceKm = routeKm;
   const quote = useMemo(() => {
-    if (distanceKm == null) return null;
+    if (distanceKm == null || !pickup || !dropoff) return null;
     const raw = quoteDeliveryPrice("normal", state.settings, distanceKm);
-    if (user?.role !== "business") return raw;
-    return clampQuoteToBusinessCosts(raw, withBusinessOrderCosts(user));
-  }, [state.settings, distanceKm, user]);
-  const costCaps = user?.role === "business" ? withBusinessOrderCosts(user) : null;
+    const ranged =
+      user?.role === "business"
+        ? clampQuoteToBusinessCosts(raw, withBusinessOrderCosts(user))
+        : raw;
+    // Urgency multiplies after the business range, exactly as the store does
+    // when the order is actually created.
+    return applyUrgentPricing(ranged, urgent);
+  }, [state.settings, distanceKm, user, pickup, dropoff, urgent]);
+
+  // What the client typed, if anything, and whether Direct can accept it.
+  const typedUsd = priceInput.trim() === "" ? null : Number(priceInput);
+  const priceProblem =
+    typedUsd == null || quote == null
+      ? null
+      : clientPriceError({ requestedUsd: typedUsd, quotedUsd: quote.totalUsd });
+  const useTypedPrice = typedUsd != null && priceProblem == null;
+  const finalUsd = quote == null ? 0 : useTypedPrice ? typedUsd : quote.totalUsd;
+  const finalLbp =
+    quote == null
+      ? 0
+      : useTypedPrice
+        ? scaleLbpToUsd(typedUsd, quote.totalUsd, quote.totalLbp)
+        : quote.totalLbp;
+  const priceMessage =
+    priceProblem === "below_quote" && quote
+      ? fmt(dict.order.priceBelowQuote, {
+          min: formatDeliveryCash(quote.totalUsd, quote.totalLbp),
+        })
+      : priceProblem === "invalid"
+        ? dict.order.priceInvalid
+        : null;
+
+  /** Walk the price one step up or down, never below what Direct quotes. */
+  function nudgePrice(direction: 1 | -1) {
+    if (!quote) return;
+    const base = typedUsd != null && Number.isFinite(typedUsd) ? typedUsd : quote.totalUsd;
+    const next = Math.round((base + direction * PRICE_STEP_USD) * 100) / 100;
+    // Back at the quote means "whatever Direct says" again, not a typed value
+    // that happens to match — so the recommended line disappears with it.
+    setPriceInput(next <= quote.totalUsd ? "" : next.toFixed(2));
+  }
+
+  function toggleUrgent(next: boolean) {
+    setUrgent(next);
+    // The quote just moved by 3×, so any price typed against the old one is
+    // no longer meaningful — start from the new quote instead.
+    setPriceInput("");
+  }
 
   const nearby = state.drivers
     .filter((d) => d.is_online)
@@ -157,7 +226,7 @@ function NewOrderContent() {
 
   async function onMapClick(lat: number, lng: number) {
     const address = await reverseGeocode(lat, lng);
-    if (isBusiness || pinTarget === "dropoff") {
+    if (pinTarget === "dropoff") {
       setDropoff({ address, lat, lng });
       return;
     }
@@ -165,10 +234,36 @@ function NewOrderContent() {
     setPinTarget("dropoff");
   }
 
+  function useMyLocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      toast.error(dict.driver.locationDenied);
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        void reverseGeocode(lat, lng).then((address) => {
+          if (pinTarget === "dropoff") {
+            setDropoff({ address, lat, lng });
+          } else {
+            setPickup({ address, lat, lng });
+            setPinTarget("dropoff");
+          }
+          setLocating(false);
+        });
+      },
+      () => {
+        toast.error(dict.driver.locationDenied);
+        setLocating(false);
+      },
+    );
+  }
+
   async function placeOrder() {
-    if (!user) return;
-    if (user.role === "business" && !shopReady) {
-      toast.error(dict.order.missingShop);
+    if (!user || !pickup || !dropoff) return;
+    if (priceMessage) {
+      toast.error(priceMessage);
       return;
     }
     setPlacing(true);
@@ -180,6 +275,8 @@ function NewOrderContent() {
       dropoff_lat: dropoff.lat,
       dropoff_lng: dropoff.lng,
       product_description: product,
+      is_urgent: urgent,
+      ...(useTypedPrice ? { price_usd: typedUsd } : {}),
     });
     setPlacing(false);
     if (result.error) {
@@ -197,23 +294,10 @@ function NewOrderContent() {
             {fmt(dict.order.stepOf, { step, total: 4 })}
           </p>
 
-          {step === 1 && isBusiness && !shopReady ? (
+          {step === 1 ? (
             <Card className="border-2">
               <CardHeader>
                 <CardTitle className="text-2xl">{dict.order.whereTitle}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-easy text-muted-foreground">{dict.order.missingShop}</p>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {step === 1 && !(isBusiness && !shopReady) ? (
-            <Card className="border-2">
-              <CardHeader>
-                <CardTitle className="text-2xl">
-                  {isBusiness ? dict.order.dropoffOnlyTitle : dict.order.whereTitle}
-                </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 {isBusiness ? (
@@ -226,7 +310,7 @@ function NewOrderContent() {
                       placeholder={dict.order.searchPlace}
                       className="h-12 text-lg"
                       onSelect={(place) => {
-                        if (isBusiness || pinTarget === "dropoff") {
+                        if (pinTarget === "dropoff") {
                           setDropoff(place);
                         } else {
                           setPickup(place);
@@ -237,83 +321,67 @@ function NewOrderContent() {
                   </div>
                 ) : null}
 
-                {isBusiness ? null : (
-                  <div className="flex gap-2" role="group" aria-label={dict.order.mapTip}>
-                    <Button
-                      type="button"
-                      variant={pinTarget === "pickup" ? "default" : "outline"}
-                      size="lg"
-                      className="touch-target flex-1 rounded-full"
-                      onClick={() => setPinTarget("pickup")}
-                    >
-                      <CircleDot data-icon="inline-start" />
-                      {dict.order.setPickup}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={pinTarget === "dropoff" ? "default" : "outline"}
-                      size="lg"
-                      className="touch-target flex-1 rounded-full"
-                      onClick={() => setPinTarget("dropoff")}
-                    >
-                      <Square data-icon="inline-start" />
-                      {dict.order.setDropoff}
-                    </Button>
-                  </div>
-                )}
+                <div className="flex flex-wrap gap-2" role="group" aria-label={dict.order.mapTip}>
+                  <Button
+                    type="button"
+                    variant={pinTarget === "pickup" ? "default" : "outline"}
+                    size="lg"
+                    className="touch-target flex-1 rounded-full"
+                    onClick={() => setPinTarget("pickup")}
+                  >
+                    <CircleDot data-icon="inline-start" />
+                    {dict.order.setPickup}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={pinTarget === "dropoff" ? "default" : "outline"}
+                    size="lg"
+                    className="touch-target flex-1 rounded-full"
+                    onClick={() => setPinTarget("dropoff")}
+                  >
+                    <Square data-icon="inline-start" />
+                    {dict.order.setDropoff}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    className="touch-target flex-1 rounded-full"
+                    onClick={useMyLocation}
+                    disabled={locating}
+                  >
+                    <MapPin data-icon="inline-start" />
+                    {dict.order.useMyLocation}
+                  </Button>
+                </div>
                 {mapsAvailable ? (
-                  <p className="text-sm text-muted-foreground">
-                    {isBusiness ? dict.order.shopPickupHint : dict.order.mapTip}
-                  </p>
+                  <p className="text-sm text-muted-foreground">{dict.order.mapTip}</p>
                 ) : null}
 
-                <div className="flex flex-col gap-2">
-                  <Label className="text-lg">
-                    {isBusiness ? dict.order.shopPickupLocked : dict.order.pickupAddress}
-                  </Label>
-                  <Input
-                    className="h-12 text-lg"
-                    value={locationLabel(pickup.address, pickup.lat, pickup.lng)}
-                    onChange={(e) => setPickup((p) => ({ ...p, address: e.target.value }))}
-                    readOnly={isBusiness}
+                {/* Read-outs, not inputs: an address typed here would never
+                    move the pin, so the map and the search box own the choice
+                    and these two just show where it landed. Side by side, they
+                    cost one row instead of four. */}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <ChosenPoint
+                    icon={CircleDot}
+                    label={dict.order.pickupAddress}
+                    value={pickup ? locationLabel(pickup.address, pickup.lat, pickup.lng) : null}
+                    placeholder={dict.home.pickupPlaceholder}
+                  />
+                  <ChosenPoint
+                    icon={Square}
+                    label={dict.order.dropoffAddress}
+                    value={dropoff ? locationLabel(dropoff.address, dropoff.lat, dropoff.lng) : null}
+                    placeholder={dict.home.dropoffPlaceholder}
                   />
                 </div>
-                <div className="flex flex-col gap-2">
-                  <Label className="text-lg">{dict.order.dropoffAddress}</Label>
-                  <Input
-                    className="h-12 text-lg"
-                    value={locationLabel(dropoff.address, dropoff.lat, dropoff.lng)}
-                    onChange={(e) => setDropoff((p) => ({ ...p, address: e.target.value }))}
-                  />
-                </div>
-
-                {isBusiness ? null : (
-                  <div className="flex flex-col gap-2">
-                    <Label className="text-sm text-muted-foreground">{dict.order.shortcuts}</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {PRESETS.map((p) => (
-                        <Button
-                          key={p.label}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="touch-target"
-                          onClick={() => {
-                            setPickup(p.pickup);
-                            setDropoff(p.dropoff);
-                          }}
-                        >
-                          {p.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 <Button
                   size="lg"
                   className="touch-target h-12 w-fit rounded-full px-6 text-base font-semibold"
                   onClick={() => setStep(2)}
+                  disabled={!pickup || !dropoff}
                 >
                   {dict.common.next}
                 </Button>
@@ -366,29 +434,99 @@ function NewOrderContent() {
                     <p className="text-base text-muted-foreground">{dict.order.calculatingRoute}</p>
                   ) : (
                     <>
-                      <p className="text-xl">
-                        {dict.order.price}:{" "}
-                        <strong>{formatDeliveryCash(quote.totalUsd, quote.totalLbp)}</strong>
+                      {/* The price is the control: arrows beside it walk it up
+                          from what Direct recommends, never below. */}
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-xl">{dict.order.price}:</span>
+                        <div className="inline-flex items-center gap-1 rounded-full border-2 bg-background p-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-lg"
+                            className="size-11 shrink-0 rounded-full"
+                            aria-label={dict.order.lowerPrice}
+                            disabled={!useTypedPrice}
+                            onClick={() => nudgePrice(-1)}
+                          >
+                            <ChevronDown className="size-5" />
+                          </Button>
+                          <strong className="px-2 text-center text-xl tabular-nums">
+                            {formatDeliveryCash(finalUsd, finalLbp)}
+                          </strong>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-lg"
+                            className="size-11 shrink-0 rounded-full"
+                            aria-label={dict.order.raisePrice}
+                            onClick={() => nudgePrice(1)}
+                          >
+                            <ChevronUp className="size-5" />
+                          </Button>
+                        </div>
+                        {useTypedPrice ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="lg"
+                            className="touch-target rounded-full"
+                            onClick={() => setPriceInput("")}
+                          >
+                            {dict.order.useQuotedPrice}
+                          </Button>
+                        ) : null}
+                      </div>
+                      {useTypedPrice ? (
+                        <p className="text-base text-muted-foreground">
+                          {dict.order.quotedPrice}:{" "}
+                          {formatDeliveryCash(quote.totalUsd, quote.totalLbp)}
+                        </p>
+                      ) : null}
+                      <p className="text-base text-muted-foreground">
+                        {fmt(dict.order.priceEditHint, {
+                          min: formatDeliveryCash(quote.totalUsd, quote.totalLbp),
+                        })}
                       </p>
+                      {priceMessage ? (
+                        <p className="text-base font-medium text-destructive">{priceMessage}</p>
+                      ) : null}
                       <p className="text-base text-muted-foreground">
                         {dict.order.distance}: {distanceKm.toFixed(1)} {dict.common.km}
                       </p>
+                      {urgent ? (
+                        <p className="text-base font-medium text-amber-600 dark:text-amber-400">
+                          {dict.order.urgentApplied}
+                        </p>
+                      ) : null}
                       {quote.nightUsd > 0 ? (
                         <p className="text-base text-muted-foreground">
                           {fmt(dict.order.nightNote, { amount: quote.nightUsd.toFixed(2) })}
                         </p>
                       ) : null}
                       <p className="text-base text-muted-foreground">{dict.order.cashNote}</p>
-                      {costCaps ? (
-                        <p className="mt-2 text-base text-muted-foreground">
-                          {fmt(dict.order.priceRange, {
-                            min: formatDeliveryCash(costCaps.order_min_usd, costCaps.order_min_lbp),
-                            max: formatDeliveryCash(costCaps.order_max_usd, costCaps.order_max_lbp),
-                          })}
-                        </p>
-                      ) : null}
                     </>
                   )}
+                </div>
+
+                {/* Urgent: three times the price, and the note says so before
+                    the box is ticked, not after. */}
+                <div className="flex flex-col gap-2 rounded-xl border-2 p-4">
+                  <label className="touch-target flex min-h-11 cursor-pointer items-center gap-3">
+                    <input
+                      type="checkbox"
+                      className="size-5 accent-primary"
+                      checked={urgent}
+                      onChange={(e) => toggleUrgent(e.target.checked)}
+                    />
+                    <span className="inline-flex items-center gap-2 text-lg font-semibold">
+                      <Zap className="size-5 text-amber-500" aria-hidden />
+                      {dict.order.urgentLabel}
+                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-sm font-bold text-amber-700 dark:text-amber-400">
+                        ×{URGENT_PRICE_MULTIPLIER}
+                      </span>
+                    </span>
+                  </label>
+                  <p className="text-base text-muted-foreground">{dict.order.urgentPriceNote}</p>
                 </div>
 
                 <div className="flex gap-2">
@@ -404,7 +542,7 @@ function NewOrderContent() {
                     size="lg"
                     className="touch-target h-12 rounded-full px-6 text-base font-semibold"
                     onClick={() => setStep(4)}
-                    disabled={quote == null}
+                    disabled={quote == null || priceMessage != null}
                   >
                     {dict.common.next}
                   </Button>
@@ -413,7 +551,7 @@ function NewOrderContent() {
             </Card>
           ) : null}
 
-          {step === 4 && quote != null && distanceKm != null ? (
+          {step === 4 && quote != null && distanceKm != null && pickup && dropoff ? (
             <OrderReceipt
               order={{
                 product_description: product,
@@ -424,28 +562,30 @@ function NewOrderContent() {
                 dropoff_lat: dropoff.lat,
                 dropoff_lng: dropoff.lng,
                 order_type: "normal",
+                is_urgent: urgent,
               }}
               cashLabel={dict.common.cash}
-              cashValue={formatDeliveryCash(quote.totalUsd, quote.totalLbp)}
+              cashValue={formatDeliveryCash(finalUsd, finalLbp)}
               extraCashLines={[
                 {
                   label: dict.order.distance,
                   value: `${distanceKm.toFixed(1)} ${dict.common.km}`,
                 },
+                ...(useTypedPrice
+                  ? [
+                      {
+                        label: dict.order.quotedPrice,
+                        value: formatDeliveryCash(quote.totalUsd, quote.totalLbp),
+                      },
+                    ]
+                  : []),
               ]}
               people={
                 <div className="flex flex-col gap-2 text-base text-muted-foreground">
                   <p>{dict.order.cashNote}</p>
+                  {urgent ? <p>{dict.order.urgentPriceNote}</p> : null}
                   {quote.nightUsd > 0 ? (
                     <p>{fmt(dict.order.nightNote, { amount: quote.nightUsd.toFixed(2) })}</p>
-                  ) : null}
-                  {costCaps ? (
-                    <p>
-                      {fmt(dict.order.priceRange, {
-                        min: formatDeliveryCash(costCaps.order_min_usd, costCaps.order_min_lbp),
-                        max: formatDeliveryCash(costCaps.order_max_usd, costCaps.order_max_lbp),
-                      })}
-                    </p>
                   ) : null}
                 </div>
               }
@@ -474,29 +614,44 @@ function NewOrderContent() {
 
           <DeliveryMap
             standalone={false}
+            // The pins already say all of this on the map itself, and the
+            // addresses are right above it — the list underneath was noise.
+            showLegend={false}
             markers={[
-              {
-                id: "pickup",
-                lat: pickup.lat,
-                lng: pickup.lng,
-                label: dict.order.pickupAddress,
-                place: pickup.address,
-                kind: "pickup",
-              },
-              {
-                id: "dropoff",
-                lat: dropoff.lat,
-                lng: dropoff.lng,
-                label: dict.order.dropoffAddress,
-                place: dropoff.address,
-                kind: "dropoff",
-              },
+              ...(pickup
+                ? [
+                    {
+                      id: "pickup",
+                      lat: pickup.lat,
+                      lng: pickup.lng,
+                      label: dict.order.pickupAddress,
+                      place: pickup.address,
+                      kind: "pickup" as const,
+                    },
+                  ]
+                : []),
+              ...(dropoff
+                ? [
+                    {
+                      id: "dropoff",
+                      lat: dropoff.lat,
+                      lng: dropoff.lng,
+                      label: dict.order.dropoffAddress,
+                      place: dropoff.address,
+                      kind: "dropoff" as const,
+                    },
+                  ]
+                : []),
               ...nearby,
             ]}
-            route={[
-              { lat: pickup.lat, lng: pickup.lng },
-              { lat: dropoff.lat, lng: dropoff.lng },
-            ]}
+            route={
+              pickup && dropoff
+                ? [
+                    { lat: pickup.lat, lng: pickup.lng },
+                    { lat: dropoff.lat, lng: dropoff.lng },
+                  ]
+                : undefined
+            }
             onMapClick={step === 1 ? onMapClick : undefined}
             routeHint={dict.order.nearbyHint}
           />

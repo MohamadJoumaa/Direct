@@ -6,6 +6,7 @@ import { ArrowLeft, Phone, ShieldCheck, Star } from "lucide-react";
 import { formatDeliveryCash } from "@direct/shared";
 import { DocumentAttachment } from "@/components/document-attachment";
 import { ProfilePhoto } from "@/components/profile-photo";
+import { SubscriptionCountdown } from "@/components/subscription-countdown";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
@@ -126,6 +127,10 @@ export default function AdminDriverProfilePage() {
                 : dict.admin.planSubscription}
             </p>
             <p>
+              <strong>{dict.admin.subscriptionPlan}:</strong>{" "}
+              {driver.subscription_plan === "daily" ? dict.driver.planDaily : dict.driver.planMonthly}
+            </p>
+            <p>
               <strong>{dict.admin.paymentMethod}:</strong> {payMethodLabel(payMethod, dict)}
             </p>
             <p className="flex flex-wrap items-center gap-2">
@@ -135,7 +140,8 @@ export default function AdminDriverProfilePage() {
             {driver.subscription_ends_at ? (
               <p>
                 <strong>{dict.driver.ends}:</strong>{" "}
-                {new Date(driver.subscription_ends_at).toLocaleDateString()}
+                {new Date(driver.subscription_ends_at).toLocaleDateString()}{" "}
+                (<SubscriptionCountdown endsAt={driver.subscription_ends_at} />)
               </p>
             ) : null}
             <p className="text-base text-muted-foreground">{dict.admin.restrictionHint}</p>

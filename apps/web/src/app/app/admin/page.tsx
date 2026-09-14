@@ -195,6 +195,11 @@ function OrdersTable({
                 <TableRow key={o.id}>
                   <TableCell className="font-mono text-base font-semibold tabular-nums">
                     {formatOrderNumber(o.order_number)}
+                    {o.is_urgent ? (
+                      <span className="ms-2 rounded-full bg-amber-500/15 px-2 py-0.5 font-sans text-xs font-bold text-amber-700 dark:text-amber-400">
+                        {dict.admin.urgentOrder}
+                      </span>
+                    ) : null}
                   </TableCell>
                   <TableCell className="text-base">{o.product_description}</TableCell>
                   <TableCell className="text-base">

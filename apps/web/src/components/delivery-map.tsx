@@ -87,7 +87,7 @@ function DeliveryMapCard({
   onMapClick,
   showLegend = true,
 }: Omit<Props, "standalone">) {
-  const { dict } = useI18n();
+  const { dict, lang } = useI18n();
   const mapsAvailable = useMapsAvailable();
 
   const inner = mapsAvailable ? (
@@ -125,7 +125,7 @@ function DeliveryMapCard({
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{markerKindLabel(m.kind, dict)}</Badge>
                   <span className="text-sm text-muted-foreground">
-                    {locationLabel(m.place, m.lat, m.lng)}
+                    {locationLabel(m.place, m.lat, m.lng, lang)}
                   </span>
                 </div>
               </li>

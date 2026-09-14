@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Zap } from "lucide-react";
+import type { RouteStop } from "@direct/shared";
 import { availableOrdersForDriver, driverCommissionTotals, driverCompanyPayMode, driverPayDueUsd, formatOrderNumber, offerForDriver } from "@/lib/demo-store";
+import { buildDriverRoute } from "@/lib/driver-route";
 import { LinkButton } from "@/components/link-button";
 import { DriverWhishActions } from "@/components/driver-whish-actions";
+import { SubscriptionCountdown } from "@/components/subscription-countdown";
 import { DeliveryMap } from "@/components/delivery-map";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -17,12 +21,14 @@ import { locationLabel } from "@/lib/place-name";
 import { nextNavStop, openDrivingDirections } from "@/lib/maps-nav";
 import { OrderSearchField, useOrderSearch } from "@/components/order-search";
 import { orderPartyExtras } from "@/lib/order-search";
+import { cn } from "@/lib/utils";
 
 export default function DriverHomePage() {
   const { user, driver: realDriver, isAdmin } = useAuth();
   const { state, claimOrder, declineOffer, setOnline } = useStore();
-  const { dict } = useI18n();
+  const { dict, lang } = useI18n();
   const [locError, setLocError] = useState<string | null>(null);
+  const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
   const driver =
     realDriver ??
     (isAdmin && user
@@ -36,6 +42,7 @@ export default function DriverHomePage() {
           rating_count: 0,
           subscription_status: "active" as const,
           subscription_ends_at: null,
+          subscription_plan: "monthly" as const,
           admin_frozen: false,
           banned: false,
           payment_waived: false,
@@ -63,6 +70,26 @@ export default function DriverHomePage() {
     showSearch: showPendingSearch,
     filtered: filteredAvailable,
   } = useOrderSearch(available);
+
+  const activeRouteKey = active.map((o) => `${o.id}:${o.status}`).join(",");
+  const liveLoc = user ? state.locations.find((l) => l.driver_id === user.id) : null;
+
+  useEffect(() => {
+    if (!user || active.length === 0) return;
+    let cancelled = false;
+    void buildDriverRoute(state, user.id).then((stops) => {
+      if (!cancelled) setRouteStops(stops);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Re-sequence only when the driver's active orders or live fix change —
+    // not on every unrelated store update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, activeRouteKey, liveLoc?.lat, liveLoc?.lng]);
+  // Never show a stale route once every order is gone — no need to clear the
+  // state itself, just stop rendering it (avoids setState-in-effect).
+  const visibleRouteStops = active.length > 0 ? routeStops : [];
 
   if (!user || !driver) {
     return (
@@ -179,6 +206,12 @@ export default function DriverHomePage() {
                   days: state.settings.grace_days,
                 })}
               </p>
+              {driver.subscription_ends_at ? (
+                <p className="text-base text-muted-foreground">
+                  {dict.driver.ends}:{" "}
+                  <SubscriptionCountdown endsAt={driver.subscription_ends_at} />
+                </p>
+              ) : null}
               <DriverWhishActions
                 kind="subscription"
                 dueAmount={payDue.amount}
@@ -210,6 +243,11 @@ export default function DriverHomePage() {
           )}
         </div>
         {locError ? <p className="text-base text-muted-foreground">{locError}</p> : null}
+        {!isAdmin && !percentageMode && driver.subscription_ends_at ? (
+          <p className="text-base text-muted-foreground">
+            {dict.driver.ends}: <SubscriptionCountdown endsAt={driver.subscription_ends_at} />
+          </p>
+        ) : null}
 
         <section className="flex flex-col gap-3">
           <h2 className="text-2xl font-bold">{dict.driver.activeJobs}</h2>
@@ -245,7 +283,7 @@ export default function DriverHomePage() {
                         const warehouse = o.warehouse_id
                           ? state.warehouses.find((w) => w.id === o.warehouse_id)
                           : null;
-                        openDrivingDirections(nextNavStop(o, warehouse));
+                        openDrivingDirections(nextNavStop(o, warehouse, visibleRouteStops));
                       }}
                     >
                       {dict.driver.navigate}
@@ -275,17 +313,31 @@ export default function DriverHomePage() {
             <p className="text-easy text-muted-foreground">{dict.common.noOrderMatches}</p>
           ) : (
             filteredAvailable.map((o) => (
-              <Card key={o.id} className="border-2 border-primary/30">
+              <Card
+                key={o.id}
+                className={cn(
+                  "border-2",
+                  o.is_urgent ? "border-amber-500" : "border-primary/30",
+                )}
+              >
                 <CardHeader>
-                  <p className="font-mono text-sm font-semibold tabular-nums text-muted-foreground">
-                    {formatOrderNumber(o.order_number)}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-mono text-sm font-semibold tabular-nums text-muted-foreground">
+                      {formatOrderNumber(o.order_number)}
+                    </p>
+                    {o.is_urgent ? (
+                      <Badge className="gap-1 bg-amber-500 text-black hover:bg-amber-500">
+                        <Zap className="size-3.5" />
+                        {dict.order.urgentBadge}
+                      </Badge>
+                    ) : null}
+                  </div>
                   <CardTitle className="text-xl">{o.product_description}</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3 text-lg">
                   <p>
-                    {locationLabel(o.pickup_address, o.pickup_lat, o.pickup_lng)} →{" "}
-                    {locationLabel(o.dropoff_address, o.dropoff_lat, o.dropoff_lng)}
+                    {locationLabel(o.pickup_address, o.pickup_lat, o.pickup_lng, lang)} →{" "}
+                    {locationLabel(o.dropoff_address, o.dropoff_lat, o.dropoff_lng, lang)}
                   </p>
                   <p>${o.driver_cut_usd.toFixed(2)}</p>
                   {user
@@ -333,6 +385,49 @@ export default function DriverHomePage() {
           )}
         </section>
 
+        {visibleRouteStops.length > 0 ? (
+          <Card className="border-2">
+            <CardHeader>
+              <CardTitle className="text-xl">{dict.driver.yourRoute}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <ol className="flex flex-col gap-2">
+                {visibleRouteStops.map((stop, i) => {
+                  const stopOrder = state.orders.find((o) => o.id === stop.orderId);
+                  const place =
+                    stop.kind === "pickup" ? stopOrder?.pickup_address : stopOrder?.dropoff_address;
+                  return (
+                    <li
+                      key={stop.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-base"
+                    >
+                      <span className="font-medium">
+                        {i + 1}. {stopOrder ? formatOrderNumber(stopOrder.order_number) : ""}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">
+                          {stop.kind === "pickup" ? dict.common.pickup : dict.common.dropoff}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {locationLabel(place, stop.lat, stop.lng, lang)}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+              <Button
+                type="button"
+                size="lg"
+                className="touch-target h-12 w-fit rounded-full px-6 text-base font-semibold"
+                onClick={() => openDrivingDirections(nextNavStop(active[0], null, visibleRouteStops))}
+              >
+                {dict.driver.navigateNextStop}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <DeliveryMap
           markers={state.locations
             .filter((l) => state.drivers.find((d) => d.id === l.driver_id)?.is_online)
@@ -346,6 +441,7 @@ export default function DriverHomePage() {
                 kind: "driver" as const,
               };
             })}
+          route={visibleRouteStops.length > 1 ? visibleRouteStops.map((s) => ({ lat: s.lat, lng: s.lng })) : undefined}
         />
       </div>
   );

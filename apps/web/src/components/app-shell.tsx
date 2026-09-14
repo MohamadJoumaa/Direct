@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import {
   Bell,
@@ -54,6 +54,7 @@ import {
 
 const toastedCancelIds = new Set<string>();
 const toastedOfferIds = new Set<string>();
+const toastedApprovalIds = new Set<string>();
 
 function NotificationBell() {
   const { user } = useAuth();
@@ -120,18 +121,20 @@ function DriverCancelAlerts() {
   const { state, markNotificationRead } = useStore();
   const userId = user?.id;
 
-  const cancels =
-    userId && effectiveRole === "driver"
-      ? state.notifications.filter(
-          (n) => n.user_id === userId && n.kind === "order_cancelled" && !n.read,
-        )
+  // One memo for all three lists: fresh arrays on every render would make the
+  // toast effect below re-run constantly.
+  const { cancels, offers, approvals } = useMemo(() => {
+    const mine = userId
+      ? state.notifications.filter((n) => n.user_id === userId && !n.read)
       : [];
-  const offers =
-    userId && effectiveRole === "driver"
-      ? state.notifications.filter(
-          (n) => n.user_id === userId && n.kind === "order_offered" && !n.read,
-        )
-      : [];
+    const driving = effectiveRole === "driver";
+    return {
+      cancels: driving ? mine.filter((n) => n.kind === "order_cancelled") : [],
+      offers: driving ? mine.filter((n) => n.kind === "order_offered") : [],
+      // Verification is news for every role, not just drivers.
+      approvals: mine.filter((n) => n.kind === "docs_approved"),
+    };
+  }, [effectiveRole, state.notifications, userId]);
 
   useEffect(() => {
     for (const n of cancels) {
@@ -146,7 +149,13 @@ function DriverCancelAlerts() {
       const copy = notificationCopy(n, dict, state.orders);
       toast.message(copy.title, { description: copy.body, duration: 5000 });
     }
-  }, [cancels, dict, offers, state.orders]);
+    for (const n of approvals) {
+      if (toastedApprovalIds.has(n.id)) continue;
+      toastedApprovalIds.add(n.id);
+      const copy = notificationCopy(n, dict, state.orders);
+      toast.success(copy.title, { description: copy.body, duration: 6000 });
+    }
+  }, [approvals, cancels, dict, offers, state.orders]);
 
   if (cancels.length === 0) return null;
 
@@ -309,7 +318,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </SelectContent>
               </Select>
             ) : null}
-            {driver ? (
+            {effectiveRole === "driver" && driver ? (
               <Badge variant={driver.is_online ? "default" : "secondary"} className="text-sm">
                 <MapPin />
                 {driver.is_online ? dict.common.online : dict.common.offline}

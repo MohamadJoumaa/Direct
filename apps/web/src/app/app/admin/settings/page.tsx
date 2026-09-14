@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   formatDeliveryCash,
@@ -18,8 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
+import { adminProfiles, isProtectedAdmin } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
+import { fmt, useI18n } from "@/lib/i18n";
 
 const PREVIEW_KM = [1, 3, 15, 50, 150, 200] as const;
 const PREVIEW_AT = new Date("2026-09-01T12:00:00+03:00");
@@ -76,12 +81,17 @@ export default function AdminSettingsPage() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
-                label="Subscription $"
+                label="Monthly subscription $"
                 value={s.subscription_price_usd}
                 onChange={(v) => num("subscription_price_usd", v)}
               />
               <Field
-                label="Grace days"
+                label="Daily subscription $"
+                value={s.subscription_daily_price_usd}
+                onChange={(v) => num("subscription_daily_price_usd", v)}
+              />
+              <Field
+                label="Grace days (monthly plan only — daily has none)"
                 value={s.grace_days}
                 onChange={(v) => num("grace_days", v)}
               />
@@ -94,6 +104,12 @@ export default function AdminSettingsPage() {
                 label="Company %"
                 value={s.company_percentage}
                 onChange={(v) => num("company_percentage", v)}
+              />
+              <Field
+                label="Max active orders per driver"
+                value={s.max_active_orders}
+                step="1"
+                onChange={(v) => num("max_active_orders", v)}
               />
               <Field
                 label="Night surcharge $"
@@ -212,6 +228,8 @@ export default function AdminSettingsPage() {
           </CardContent>
         </Card>
 
+        <AdminDirectory />
+
         <Button
           variant="outline"
           size="lg"
@@ -224,6 +242,155 @@ export default function AdminSettingsPage() {
           Reset demo data
         </Button>
       </div>
+  );
+}
+
+/** Who else can run Direct. The founder account is deliberately unremovable. */
+function AdminDirectory() {
+  const { state, addAdmin, removeAdmin } = useStore();
+  const { dict } = useI18n();
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+
+  const admins = adminProfiles(state);
+
+  function onAdd(e: React.FormEvent) {
+    e.preventDefault();
+    const err = addAdmin({
+      full_name: fullName,
+      email,
+      phone,
+      password,
+    });
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    toast.success(dict.admin.adminAdded);
+    setFullName("");
+    setEmail("");
+    setPhone("");
+    setPassword("");
+  }
+
+  return (
+    <Card className="border-2">
+      <CardHeader>
+        <CardTitle className="text-2xl">{dict.admin.adminsTitle}</CardTitle>
+        <CardDescription className="text-base">{dict.admin.adminsHint}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        <ul className="flex flex-col gap-2">
+          {admins.map((admin) => {
+            const locked = isProtectedAdmin(admin);
+            return (
+              <li
+                key={admin.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"
+              >
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-lg font-semibold">
+                    {admin.full_name}
+                    {locked ? (
+                      <Badge variant="secondary" className="gap-1">
+                        <ShieldCheck className="size-3.5" />
+                        {dict.admin.mainAdmin}
+                      </Badge>
+                    ) : null}
+                  </p>
+                  <p className="text-base text-muted-foreground">
+                    {admin.phone} · {admin.email}
+                  </p>
+                </div>
+                {locked ? null : (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="touch-target"
+                    onClick={() => {
+                      if (!window.confirm(dict.admin.confirmRemoveAdmin)) return;
+                      const err = removeAdmin(admin.id);
+                      if (err) toast.error(err);
+                      else toast.success(dict.admin.adminRemoved);
+                    }}
+                  >
+                    <Trash2 data-icon="inline-start" />
+                    {dict.common.remove}
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <p className="text-base text-muted-foreground">
+          {fmt(dict.admin.mainAdminHint, { number: state.settings.whish_number })}
+        </p>
+
+        <form onSubmit={onAdd} className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="ad-name" className="text-lg">
+              {dict.common.name}
+            </Label>
+            <Input
+              id="ad-name"
+              className="h-12 text-lg"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="ad-phone" className="text-lg">
+              {dict.common.phone}
+            </Label>
+            <Input
+              id="ad-phone"
+              className="h-12 text-lg"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              autoComplete="off"
+              required
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="ad-email" className="text-lg">
+              {dict.common.email}
+            </Label>
+            <Input
+              id="ad-email"
+              type="email"
+              className="h-12 text-lg"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="off"
+              required
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="ad-pass" className="text-lg">
+              {dict.common.password}
+            </Label>
+            <Input
+              id="ad-pass"
+              type="password"
+              className="h-12 text-lg"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              minLength={6}
+              required
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Button type="submit" size="lg" className="touch-target rounded-full px-6">
+              {dict.admin.addAdminAction}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 

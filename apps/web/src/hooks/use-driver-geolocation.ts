@@ -5,19 +5,22 @@ import { haversineKm } from "@direct/shared";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
 
-const MIN_INTERVAL_MS = 8000;
+const MIN_INTERVAL_MS = 4000;
 const MIN_MOVE_KM = 0.025;
 
-/** Broadcast GPS while the signed-in driver is online, on any screen. */
+/** Broadcast GPS while the signed-in driver is online, on any screen.
+ *  Gated on the effective role, not just `driver` truthiness — the admin's
+ *  synthetic owner driver row must not start a GPS watch while an admin is
+ *  viewing the app as client/business. */
 export function useDriverGeolocation() {
-  const { user, driver } = useAuth();
+  const { user, driver, effectiveRole } = useAuth();
   const { updateLocation } = useStore();
   const updateRef = useRef(updateLocation);
   updateRef.current = updateLocation;
   const last = useRef<{ t: number; lat: number; lng: number } | null>(null);
 
   const userId = user?.id;
-  const online = Boolean(driver?.is_online);
+  const online = effectiveRole === "driver" && Boolean(driver?.is_online);
 
   useEffect(() => {
     if (!userId || !online) return;

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Clock, MapPin, Package } from "lucide-react";
+import { Clock, MapPin, Package, Zap } from "lucide-react";
 import type { Order, Warehouse } from "@/lib/demo-store";
 import { formatOrderNumber } from "@/lib/demo-store";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,7 @@ export type OrderReceiptData = Pick<
   | "dropoff_lng"
   | "order_type"
 > &
-  Partial<Pick<Order, "order_number" | "created_at" | "status" | "eta_minutes">>;
+  Partial<Pick<Order, "order_number" | "created_at" | "status" | "eta_minutes" | "is_urgent">>;
 
 export function OrderReceipt({
   order,
@@ -70,6 +70,12 @@ export function OrderReceipt({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {order.is_urgent ? (
+            <Badge className="gap-1 bg-amber-500 text-black hover:bg-amber-500">
+              <Zap className="size-3.5" />
+              {dict.order.urgentBadge}
+            </Badge>
+          ) : null}
           {order.status ? (
             <Badge variant="outline" className="capitalize">
               {orderStatusLabel(order.status, dict)}
@@ -92,18 +98,18 @@ export function OrderReceipt({
         <div className="grid gap-3 sm:grid-cols-2">
           <LocationBox
             label={dict.common.from}
-            value={locationLabel(order.pickup_address, order.pickup_lat, order.pickup_lng)}
+            value={locationLabel(order.pickup_address, order.pickup_lat, order.pickup_lng, lang)}
           />
           <LocationBox
             label={dict.common.to}
-            value={locationLabel(order.dropoff_address, order.dropoff_lat, order.dropoff_lng)}
+            value={locationLabel(order.dropoff_address, order.dropoff_lat, order.dropoff_lng, lang)}
           />
         </div>
 
         {warehouse ? (
           <LocationBox
             label={dict.common.warehouse}
-            value={`${warehouse.name} — ${locationLabel(warehouse.address, warehouse.lat, warehouse.lng)}`}
+            value={`${warehouse.name} — ${locationLabel(warehouse.address, warehouse.lat, warehouse.lng, lang)}`}
           />
         ) : null}
 

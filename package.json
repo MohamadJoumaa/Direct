@@ -10,9 +10,18 @@
     "build": "npm run build -w @direct/web",
     "lint": "npm run lint -w @direct/web",
     "test:shared": "npm run test -w @direct/shared",
-    "db:reset": "npx supabase db reset"
+    "db:reset": "npx supabase db reset",
+    "mobile": "npm run start -w @direct/mobile",
+    "mobile:web": "npm run web -w @direct/mobile",
+    "mobile:android": "npm run android -w @direct/mobile",
+    "mobile:ios": "npm run ios -w @direct/mobile",
+    "typecheck:mobile": "npm run typecheck -w @direct/mobile"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19"
   }
 }

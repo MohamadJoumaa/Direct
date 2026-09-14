@@ -4,11 +4,9 @@ export type LatLng = { lat: number; lng: number };
 
 export type DriverRoutePoint = LatLng & { id: string };
 
-export type DriverLeg = {
-  driverId: string;
-  toPickupKm: number;
-  toDropoffKm: number;
-};
+/** Defined in @direct/core so dispatch stays platform-agnostic. */
+export type { DriverLeg } from "@direct/core";
+import type { DriverLeg } from "@direct/core";
 
 const CACHE_TTL_MS = 45_000;
 const MATRIX_BATCH = 25;
@@ -103,6 +101,23 @@ export async function measureRouteKm(from: LatLng, to: LatLng): Promise<number> 
   const km = grid[0]?.[0] ?? haversinePair(from, to);
   rememberKm(from, to, km);
   return km;
+}
+
+/** Warm the cache for every stop pair, then expose a sync lookup for sequencing. */
+export async function prepareStopDistances(
+  points: LatLng[],
+): Promise<(a: LatLng, b: LatLng) => number> {
+  if (points.length > 1) {
+    const grid = await matrixKm(points, points);
+    points.forEach((from, i) => {
+      points.forEach((to, j) => {
+        if (i === j) return;
+        const km = grid[i]?.[j];
+        if (km != null) rememberKm(from, to, km);
+      });
+    });
+  }
+  return (a: LatLng, b: LatLng) => cachedKm(a, b) ?? haversinePair(a, b);
 }
 
 export async function measureDriverLegs(

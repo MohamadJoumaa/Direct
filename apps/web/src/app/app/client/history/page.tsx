@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
-import { formatOrderNumber } from "@/lib/demo-store";
+import { formatOrderNumber, ordersForOwner } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { orderStatusLabel, useI18n } from "@/lib/i18n";
 import { OrderSearchField, useOrderSearch } from "@/components/order-search";
@@ -23,8 +23,8 @@ export default function ClientHistoryPage() {
   const { state } = useStore();
   const { dict } = useI18n();
   const history = user
-    ? state.orders.filter(
-        (o) => o.client_id === user.id && ["completed", "cancelled", "disputed"].includes(o.status),
+    ? ordersForOwner(state, user.id).filter((o) =>
+        ["completed", "cancelled", "disputed"].includes(o.status),
       )
     : [];
   const { query, setQuery, showSearch, filtered } = useOrderSearch(history, (o) =>

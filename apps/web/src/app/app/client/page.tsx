@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
+import { Zap } from "lucide-react";
 import { formatDeliveryCash } from "@direct/shared";
-import { publicDriverLabel, formatOrderNumber, publicDriverInfo } from "@/lib/demo-store";
+import { publicDriverLabel, formatOrderNumber, publicDriverInfo, ordersForOwner } from "@/lib/demo-store";
 import { LinkButton } from "@/components/link-button";
 import { DeliveryMap } from "@/components/delivery-map";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +18,8 @@ import { orderPartyExtras } from "@/lib/order-search";
 
 export default function ClientHomePage() {
   const { user } = useAuth();
-  const { state } = useStore();
-  const { dict } = useI18n();
+  const { state, refreshFromStorage } = useStore();
+  const { dict, lang } = useI18n();
 
   const copy = {
     waiting: dict.common.waitingForDriver,
@@ -25,7 +27,7 @@ export default function ClientHomePage() {
     yourDriver: dict.common.yourDriver,
   };
 
-  const myOrders = user ? state.orders.filter((o) => o.client_id === user.id) : [];
+  const myOrders = user ? ordersForOwner(state, user.id) : [];
   const ongoing = myOrders.filter((o) => !["completed", "cancelled", "disputed"].includes(o.status));
   const {
     query: ongoingQuery,
@@ -77,22 +79,34 @@ export default function ClientHomePage() {
     return markers;
   });
 
-  const single = ongoing.length === 1 ? ongoing[0] : null;
-  const singleWarehouse =
-    single?.warehouse_id ? state.warehouses.find((w) => w.id === single.warehouse_id) : null;
-  const singleLiveId = single ? activeDriverId(single) : null;
-  const singleLinked = single ? publicDriverInfo(state, single).kind !== "none" : false;
-  const singleLive =
-    singleLinked && singleLiveId
-      ? (state.locations.find((l) => l.driver_id === singleLiveId) ?? null)
-      : null;
-  const liveRoute = single
-    ? trackingRoute(
-        single,
-        singleLive ? { lat: singleLive.lat, lng: singleLive.lng } : null,
-        singleWarehouse,
-      )
-    : undefined;
+  // A live driver fix per ongoing order (once assigned and shared), keyed by order id.
+  const liveByOrder = new Map(
+    ongoing.flatMap((o) => {
+      const driverId = activeDriverId(o);
+      const linked = publicDriverInfo(state, o).kind !== "none";
+      const loc = linked && driverId ? state.locations.find((l) => l.driver_id === driverId) : null;
+      return loc ? [[o.id, loc] as const] : [];
+    }),
+  );
+  const anyLive = liveByOrder.size > 0;
+  // Route for every ongoing order, not just when there is exactly one —
+  // each order contributes its own pickup→[hub]→drop-off (or live→next stop).
+  const liveRoute =
+    ongoing.length > 0
+      ? ongoing.flatMap((o) => {
+          const warehouse = o.warehouse_id
+            ? state.warehouses.find((w) => w.id === o.warehouse_id)
+            : null;
+          const live = liveByOrder.get(o.id);
+          return trackingRoute(o, live ? { lat: live.lat, lng: live.lng } : null, warehouse);
+        })
+      : undefined;
+
+  useEffect(() => {
+    if (!anyLive) return;
+    const id = window.setInterval(() => refreshFromStorage(), 4000);
+    return () => window.clearInterval(id);
+  }, [anyLive, refreshFromStorage]);
 
   return (
       <div className="flex flex-col gap-6">
@@ -132,8 +146,8 @@ export default function ClientHomePage() {
                     </p>
                     <CardTitle className="text-2xl">{o.product_description}</CardTitle>
                     <p className="text-lg text-muted-foreground">
-                      {locationLabel(o.pickup_address, o.pickup_lat, o.pickup_lng)} →{" "}
-                      {locationLabel(o.dropoff_address, o.dropoff_lat, o.dropoff_lng)}
+                      {locationLabel(o.pickup_address, o.pickup_lat, o.pickup_lng, lang)} →{" "}
+                      {locationLabel(o.dropoff_address, o.dropoff_lat, o.dropoff_lng, lang)}
                     </p>
                     <p className="mt-1 text-base text-muted-foreground">
                       {dict.common.driver}: {publicDriverLabel(state, o, copy)}
@@ -143,6 +157,12 @@ export default function ClientHomePage() {
                     <Badge variant="outline" className="text-sm capitalize">
                       {orderStatusLabel(o.status, dict)}
                     </Badge>
+                    {o.is_urgent ? (
+                      <Badge className="gap-1 bg-amber-500 text-black hover:bg-amber-500">
+                        <Zap className="size-3.5" />
+                        {dict.order.urgentBadge}
+                      </Badge>
+                    ) : null}
                   </div>
                 </CardHeader>
                 <CardContent className="flex flex-wrap items-center justify-between gap-3">
@@ -169,7 +189,8 @@ export default function ClientHomePage() {
           <DeliveryMap
             markers={liveMarkers}
             route={liveRoute}
-            routeHint={singleLive ? dict.client.trackingHint : dict.client.followHint}
+            routeHint={anyLive ? dict.client.trackingHint : dict.client.followHint}
+            showLegend={false}
           />
         ) : null}
       </div>

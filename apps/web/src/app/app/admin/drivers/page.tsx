@@ -189,6 +189,7 @@ export default function AdminDriversPage() {
                     <TableHead>{dict.common.name}</TableHead>
                     <TableHead>{dict.common.phone}</TableHead>
                     <TableHead>{dict.admin.companyPlan}</TableHead>
+                    <TableHead>{dict.admin.subscriptionPlan}</TableHead>
                     <TableHead>{dict.admin.paymentMethod}</TableHead>
                     <TableHead>{dict.admin.accountStatus}</TableHead>
                     <TableHead>{dict.profile.rating}</TableHead>
@@ -198,7 +199,7 @@ export default function AdminDriversPage() {
                 <TableBody>
                   {filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                         {dict.admin.noDriversMatch}
                       </TableCell>
                     </TableRow>
@@ -230,6 +231,9 @@ export default function AdminDriversPage() {
                             {driverCompanyPayMode(d, state.settings) === "percentage"
                               ? dict.admin.planPercentage
                               : dict.admin.planSubscription}
+                          </TableCell>
+                          <TableCell>
+                            {d.subscription_plan === "daily" ? dict.driver.planDaily : dict.driver.planMonthly}
                           </TableCell>
                           <TableCell>{payMethodLabel(payMethod, dict)}</TableCell>
                           <TableCell>

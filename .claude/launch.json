@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "direct-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "direct-mobile",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "mobile:web"
+      ],
+      "port": 8081
+    }
+  ]
+}

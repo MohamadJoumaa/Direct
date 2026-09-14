@@ -1,11 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Menu } from "lucide-react";
+import { CalendarDays, Menu } from "lucide-react";
 import { toast } from "sonner";
-import { percentageAccrued, subscriptionBudget, driverDailyProfit } from "@/lib/demo-store";
+import {
+  companyProfitOnDay,
+  percentageAccrued,
+  subscriptionBudget,
+  driverDailyProfit,
+} from "@/lib/demo-store";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   ChartContainer,
   ChartTooltip,
@@ -32,12 +39,26 @@ import {
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
+import { useI18n } from "@/lib/i18n";
 
 const chartConfig = {
   profit: { label: "Profit $", color: "var(--gold)" },
 } satisfies ChartConfig;
 
 type Period = "today" | "yesterday" | "week" | "month";
+
+/** `yyyy-mm-dd` in the admin's own timezone — what `<input type="date">` speaks. */
+function toDateInput(d: Date): string {
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
+function fromDateInput(value: string): Date | null {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
 
 export default function AdminMoneyPage() {
   const { isAdmin } = useAuth();
@@ -96,6 +117,8 @@ export default function AdminMoneyPage() {
             </CardContent>
           </Card>
         </div>
+
+        <ProfitByDay />
 
         <Card className="border-2">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
@@ -193,5 +216,90 @@ export default function AdminMoneyPage() {
           </CardContent>
         </Card>
       </div>
+  );
+}
+
+/** Pick any past day and read what Direct earned on it. */
+function ProfitByDay() {
+  const { state } = useStore();
+  const { dict, lang } = useI18n();
+  const today = toDateInput(new Date());
+  const [day, setDay] = useState(today);
+
+  const picked = fromDateInput(day);
+  const profit = useMemo(
+    () => (picked ? companyProfitOnDay(state, picked) : null),
+    [state, picked],
+  );
+  const readableDay = picked
+    ? picked.toLocaleDateString(lang === "ar" ? "ar-LB" : "en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "";
+
+  return (
+    <Card className="border-2">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-xl">
+          <CalendarDays className="size-5" />
+          {dict.admin.budgetByDay}
+        </CardTitle>
+        <CardDescription className="text-base">{dict.admin.budgetByDayHint}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="budget-day" className="text-lg">
+            {dict.common.day}
+          </Label>
+          <Input
+            id="budget-day"
+            type="date"
+            // No future days: there is nothing to report yet.
+            max={today}
+            className="h-12 w-fit text-lg"
+            value={day}
+            onChange={(e) => setDay(e.target.value)}
+          />
+        </div>
+        {profit ? (
+          <>
+            <p className="text-base text-muted-foreground">{readableDay}</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <DayStat label={dict.common.total} value={`$${profit.total.toFixed(2)}`} emphasize />
+              <DayStat
+                label={dict.admin.daySubscriptions}
+                value={`$${profit.subscription.toFixed(2)}`}
+              />
+              <DayStat label={dict.admin.dayOrderCuts} value={`$${profit.percentage.toFixed(2)}`} />
+            </div>
+            <p className="text-base text-muted-foreground">
+              {dict.admin.dayDeliveries}: <strong>{profit.orders}</strong>
+            </p>
+          </>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DayStat({
+  label,
+  value,
+  emphasize,
+}: {
+  label: string;
+  value: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div className="rounded-xl bg-muted p-4">
+      <p className="text-base text-muted-foreground">{label}</p>
+      <p className={emphasize ? "text-3xl font-bold text-primary" : "text-2xl font-semibold"}>
+        {value}
+      </p>
+    </div>
   );
 }

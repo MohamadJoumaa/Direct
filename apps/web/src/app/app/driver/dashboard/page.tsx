@@ -2,9 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { Menu } from "lucide-react";
+import { subscriptionPriceUsd } from "@direct/shared";
 import { driverCommissionTotals, driverCompanyPayMode, driverDailyProfit, driverPayDueUsd, driverRevenue, formatOrderNumber } from "@/lib/demo-store";
 import { LinkButton } from "@/components/link-button";
 import { DriverWhishActions } from "@/components/driver-whish-actions";
+import { SubscriptionCountdown } from "@/components/subscription-countdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -70,6 +72,15 @@ export default function DriverDashboardPage() {
     ? driverCommissionTotals(state, user.id)
     : { dueNow: 0, accruingToday: 0 };
   const payDue = driverPayDueUsd(state, driver);
+  const planLabel =
+    driver.subscription_plan === "daily" ? dict.driver.planDaily : dict.driver.planMonthly;
+  const planPrice = `${subscriptionPriceUsd(driver.subscription_plan, state.settings)}`;
+  const subStatusLabel: Record<string, string> = {
+    active: dict.driver.subStatusActive,
+    grace: dict.driver.subStatusGrace,
+    frozen: dict.driver.subStatusFrozen,
+    pending_payment: dict.driver.subStatusPending,
+  };
 
   return (
       <div className="flex flex-col gap-6">
@@ -166,8 +177,9 @@ export default function DriverDashboardPage() {
               <>
                 <p>
                   {dict.common.status}:{" "}
-                  <strong className="capitalize">
-                    {driver.subscription_status.replaceAll("_", " ")}
+                  <strong>
+                    {subStatusLabel[driver.subscription_status] ??
+                      driver.subscription_status.replaceAll("_", " ")}
                   </strong>
                 </p>
                 <p>
@@ -177,7 +189,31 @@ export default function DriverDashboardPage() {
                       ? new Date(driver.subscription_ends_at).toLocaleDateString()
                       : dict.driver.notStarted}
                   </strong>
+                  {driver.subscription_ends_at ? (
+                    <span className="ms-2 text-base text-muted-foreground">
+                      (<SubscriptionCountdown endsAt={driver.subscription_ends_at} />)
+                    </span>
+                  ) : null}
                 </p>
+                <p>
+                  {dict.driver.subscriptionPlan}:{" "}
+                  <strong>{planLabel}</strong>
+                  <span className="ms-2 text-base text-muted-foreground">
+                    {driver.subscription_plan === "daily"
+                      ? fmt(dict.driver.planDailyDesc, { price: planPrice })
+                      : fmt(dict.driver.planMonthlyDesc, { price: planPrice })}
+                  </span>
+                </p>
+                {/* One home for the choice: the pay box in the profile — the
+                    hash lands on it instead of the top of the page. */}
+                <LinkButton
+                  href="/app/profile#subscription"
+                  variant="outline"
+                  size="lg"
+                  className="touch-target w-fit rounded-full"
+                >
+                  {dict.driver.subscriptionPlan}
+                </LinkButton>
                 <p>
                   {fmt(dict.driver.amountDue, {
                     amount: payDue.amount.toFixed(2),

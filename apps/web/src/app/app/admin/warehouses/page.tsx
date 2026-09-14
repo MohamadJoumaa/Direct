@@ -2,17 +2,12 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Package, Trash2, Warehouse as WarehouseIcon } from "lucide-react";
-import {
-  DeliveryMap,
-  MapsProvider,
-  PlaceSearch,
-  reverseGeocode,
-  useMapsAvailable,
-} from "@/components/delivery-map";
+import { Package, Pencil, Trash2, User, Warehouse as WarehouseIcon } from "lucide-react";
+import { MapsProvider, PlaceSearch, hasMapsKey, useMapsAvailable } from "@/components/maps-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
@@ -21,7 +16,7 @@ import { useStore } from "@/lib/store-context";
 import { useI18n } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
 
-const DEFAULT_PIN = { lat: 33.8938, lng: 35.5018 };
+type SelectedPlace = { address: string; lat: number; lng: number };
 
 export default function AdminWarehousesPage() {
   return (
@@ -36,19 +31,23 @@ function WarehousesContent() {
   const {
     state,
     addWarehouse,
+    updateWarehouse,
     removeWarehouse,
     addWarehouseProduct,
     removeWarehouseProduct,
   } = useStore();
-  const { dict } = useI18n();
+  const { dict, lang } = useI18n();
   const mapsAvailable = useMapsAvailable();
 
   const [name, setName] = useState("");
-  const [address, setAddress] = useState("");
-  const [pin, setPin] = useState(DEFAULT_PIN);
+  const [place, setPlace] = useState<SelectedPlace | null>(null);
   const [productName, setProductName] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [productTarget, setProductTarget] = useState<string | null>(null);
+  // Which warehouse is open for editing, plus the draft being typed into it.
+  const [editTarget, setEditTarget] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPlace, setEditPlace] = useState<SelectedPlace | null>(null);
 
   if (!isAdmin) {
     return (
@@ -56,18 +55,41 @@ function WarehousesContent() {
     );
   }
 
-  async function onAddWarehouse(e: React.FormEvent) {
+  function onAddWarehouse(e: React.FormEvent) {
     e.preventDefault();
-    const resolvedAddress = address.trim() || await reverseGeocode(pin.lat, pin.lng);
+    if (!place) return;
     addWarehouse({
       name: name.trim(),
-      address: resolvedAddress,
-      lat: pin.lat,
-      lng: pin.lng,
+      address: place.address,
+      lat: place.lat,
+      lng: place.lng,
     });
     toast.success(dict.admin.warehouseAdded);
     setName("");
-    setAddress("");
+    setPlace(null);
+  }
+
+  function startEdit(w: SelectedPlace & { id: string; name: string }) {
+    setEditTarget(w.id);
+    setEditName(w.name);
+    setEditPlace({ address: w.address, lat: w.lat, lng: w.lng });
+  }
+
+  function onSaveWarehouse(e: React.FormEvent, warehouseId: string) {
+    e.preventDefault();
+    if (!editPlace) return;
+    const err = updateWarehouse(warehouseId, {
+      name: editName,
+      address: editPlace.address,
+      lat: editPlace.lat,
+      lng: editPlace.lng,
+    });
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    toast.success(dict.admin.warehouseUpdated);
+    setEditTarget(null);
   }
 
   function onAddProduct(e: React.FormEvent, warehouseId: string) {
@@ -96,64 +118,56 @@ function WarehousesContent() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <form onSubmit={onAddWarehouse} className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="wh-name">{dict.admin.warehouseName}</Label>
-                  <Input
-                    id="wh-name"
-                    className="h-11"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="wh-address">{dict.admin.address}</Label>
-                  {mapsAvailable ? (
+              {mapsAvailable ? (
+                <form onSubmit={onAddWarehouse} className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="wh-name">{dict.admin.warehouseName}</Label>
+                    <Input
+                      id="wh-name"
+                      className="h-11"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="wh-address">{dict.admin.address}</Label>
                     <PlaceSearch
                       placeholder={dict.order.searchPlace}
                       className="h-11"
-                      onSelect={(place) => {
-                        setAddress(place.address);
-                        setPin({ lat: place.lat, lng: place.lng });
-                      }}
+                      onSelect={(selected) => setPlace(selected)}
                     />
-                  ) : null}
-                  <Input
-                    id="wh-address"
-                    className="h-11"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder={dict.admin.address}
-                    required={!mapsAvailable}
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <Button type="submit" size="lg" className="touch-target rounded-full px-6">
-                    {dict.common.add}
-                  </Button>
-                </div>
-              </form>
-              <DeliveryMap
-                standalone={false}
-                height="260px"
-                markers={[
-                  ...state.warehouses.map((w) => ({
-                    id: w.id,
-                    lat: w.lat,
-                    lng: w.lng,
-                    label: w.name,
-                    place: w.address,
-                    kind: "warehouse" as const,
-                  })),
-                  { id: "new-pin", ...pin, label: dict.admin.addWarehouse, place: address, kind: "pickup" as const },
-                ]}
-                onMapClick={async (lat, lng) => {
-                  setPin({ lat, lng });
-                  setAddress(await reverseGeocode(lat, lng));
-                }}
-                routeHint={dict.order.mapTip}
-              />
+                    {/* Reflects the selected place only — free text can never
+                        silently save the wrong pin. */}
+                    <Input
+                      id="wh-address"
+                      className="h-11"
+                      value={place ? locationLabel(place.address, place.lat, place.lng, lang) : ""}
+                      placeholder={dict.admin.selectPlaceRequired}
+                      readOnly
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Button
+                      type="submit"
+                      size="lg"
+                      className="touch-target rounded-full px-6"
+                      disabled={!place}
+                    >
+                      {dict.common.add}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <Empty className="rounded-xl border border-dashed bg-muted">
+                  <EmptyHeader>
+                    <EmptyTitle className="text-lg">{dict.admin.addWarehouse}</EmptyTitle>
+                    <EmptyDescription className="text-base">
+                      {hasMapsKey() ? dict.client.mapsAuthFailed : dict.client.mapsMissingKey}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              )}
             </CardContent>
           </Card>
 
@@ -165,24 +179,94 @@ function WarehousesContent() {
                   <div>
                     <CardTitle className="text-2xl">{w.name}</CardTitle>
                     <p className="mt-1 text-base text-muted-foreground">
-                      {locationLabel(w.address, w.lat, w.lng)}
+                      {locationLabel(w.address, w.lat, w.lng, lang)}
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    className="touch-target"
-                    onClick={() => {
-                      const err = removeWarehouse(w.id);
-                      if (err) toast.error(err);
-                      else toast.success(dict.admin.warehouseRemoved);
-                    }}
-                  >
-                    <Trash2 data-icon="inline-start" />
-                    {dict.common.remove}
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="touch-target"
+                      onClick={() => (editTarget === w.id ? setEditTarget(null) : startEdit(w))}
+                    >
+                      <Pencil data-icon="inline-start" />
+                      {dict.common.edit}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="touch-target"
+                      onClick={() => {
+                        const err = removeWarehouse(w.id);
+                        if (err) toast.error(err);
+                        else toast.success(dict.admin.warehouseRemoved);
+                      }}
+                    >
+                      <Trash2 data-icon="inline-start" />
+                      {dict.common.remove}
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
+                  {editTarget === w.id ? (
+                    <form
+                      onSubmit={(e) => onSaveWarehouse(e, w.id)}
+                      className="grid gap-4 rounded-xl border-2 border-dashed p-4 sm:grid-cols-2"
+                    >
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor={`wh-edit-name-${w.id}`}>{dict.admin.warehouseName}</Label>
+                        <Input
+                          id={`wh-edit-name-${w.id}`}
+                          className="h-11"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor={`wh-edit-address-${w.id}`}>{dict.admin.address}</Label>
+                        {mapsAvailable ? (
+                          <PlaceSearch
+                            placeholder={dict.order.searchPlace}
+                            className="h-11"
+                            onSelect={(selected) => setEditPlace(selected)}
+                          />
+                        ) : null}
+                        {/* Shows the place actually saved, so the pin and its
+                            label can never drift apart. */}
+                        <Input
+                          id={`wh-edit-address-${w.id}`}
+                          className="h-11"
+                          value={
+                            editPlace
+                              ? locationLabel(editPlace.address, editPlace.lat, editPlace.lng, lang)
+                              : ""
+                          }
+                          placeholder={dict.admin.selectPlaceRequired}
+                          readOnly
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-2 sm:col-span-2">
+                        <Button
+                          type="submit"
+                          size="lg"
+                          className="touch-target rounded-full px-6"
+                          disabled={!editPlace}
+                        >
+                          {dict.admin.saveWarehouse}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="lg"
+                          variant="ghost"
+                          className="touch-target"
+                          onClick={() => setEditTarget(null)}
+                        >
+                          {dict.common.cancel}
+                        </Button>
+                      </div>
+                    </form>
+                  ) : null}
                   <p className="text-lg font-semibold">
                     <Package className="me-2 inline size-5" />
                     {dict.admin.products}
@@ -200,12 +284,21 @@ function WarehousesContent() {
                           key={p.id}
                           className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2"
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="text-base font-medium">{p.name}</span>
                             <Badge variant="secondary">×{p.quantity}</Badge>
                             {linkedOrder ? (
                               <Badge variant="outline" className="text-xs">
                                 {dict.common.orderNumber} {formatOrderNumber(linkedOrder.order_number)}
+                              </Badge>
+                            ) : null}
+                            {p.delivered_by_name ? (
+                              <Badge variant="outline" className="gap-1 text-xs">
+                                <User className="size-3" />
+                                {dict.admin.deliveredBy} {p.delivered_by_name}
+                                {p.delivered_at
+                                  ? ` ${dict.admin.deliveredOn} ${new Date(p.delivered_at).toLocaleDateString()}`
+                                  : ""}
                               </Badge>
                             ) : null}
                           </div>

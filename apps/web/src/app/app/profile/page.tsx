@@ -1,10 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Camera, Star, ShieldCheck } from "lucide-react";
-import { formatDeliveryCash, withBusinessOrderCosts, type RevenueMode } from "@direct/shared";
+import {
+  formatDeliveryCash,
+  subscriptionPriceUsd,
+  withBusinessOrderCosts,
+  type RevenueMode,
+  type SubscriptionPlan,
+} from "@direct/shared";
 import { ProfilePhoto } from "@/components/profile-photo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,18 +19,30 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
-import { profilePhotoUrl, driverCompanyPayMode } from "@/lib/demo-store";
+import { SubscriptionCountdown } from "@/components/subscription-countdown";
+import { allowedDocTypes, driverCompanyPayMode, profilePhotoUrl, type DocType } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { useI18n, fmt } from "@/lib/i18n";
 import { fileToAvatar, fileToDocumentPreview } from "@/lib/image-file";
-import { locationLabel } from "@/lib/place-name";
 import { cn } from "@/lib/utils";
 
-const DOC_TYPES = ["selfie", "id", "vehicle_registration", "driver_license"] as const;
+const BusinessShopLocation = dynamic(
+  () => import("@/components/business-shop-location").then((mod) => mod.BusinessShopLocation),
+  { ssr: false, loading: () => <div className="h-80 w-full rounded-xl bg-muted" /> },
+);
+
+/** Deep-link target, so "subscription plan" from the money page lands on it. */
+const SUBSCRIPTION_ANCHOR = "subscription";
 
 export default function ProfilePage() {
-  const { user, driver } = useAuth();
-  const { state, updateProfile, addDocument, setDriverRevenueMode } = useStore();
+  const { user, driver, effectiveRole } = useAuth();
+  const {
+    state,
+    updateProfile,
+    addDocument,
+    setDriverRevenueMode,
+    setDriverSubscriptionPlan,
+  } = useStore();
   const { dict } = useI18n();
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -31,16 +50,48 @@ export default function ProfilePage() {
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [businessName, setBusinessName] = useState(user?.business_name ?? "");
+  const [businessAddress, setBusinessAddress] = useState(user?.business_address ?? "");
+  const [businessPin, setBusinessPin] = useState<{ lat: number; lng: number } | null>(
+    user?.business_lat != null && user?.business_lng != null
+      ? { lat: user.business_lat, lng: user.business_lng }
+      : null,
+  );
+
+  // The pay card only appears once the store has hydrated and the account
+  // turns out to be a driver — later than the browser's own #hash jump, which
+  // therefore does nothing. Repeat the jump when the card is really there.
+  const payCardReady = effectiveRole === "driver" && driver != null;
+  useEffect(() => {
+    if (!payCardReady || window.location.hash !== `#${SUBSCRIPTION_ANCHOR}`) return;
+    document
+      .getElementById(SUBSCRIPTION_ANCHOR)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [payCardReady]);
 
   if (!user) return null;
 
   const orderCosts = user.role === "business" ? withBusinessOrderCosts(user) : null;
 
-  const docLabels: Record<(typeof DOC_TYPES)[number], string> = {
+  // A driver proves they can drive; a client or business only proves who they
+  // are, so the upload list itself is what enforces the rule on screen.
+  const docTypes = allowedDocTypes(user.role);
+  const isDriverDocs = user.role === "driver" || user.role === "admin";
+
+  const docLabels: Record<DocType, string> = {
     selfie: dict.profile.docSelfie,
     id: dict.profile.docId,
     vehicle_registration: dict.profile.docVehicle,
     driver_license: dict.profile.docLicense,
+  };
+
+  const subscriptionMode = driver
+    ? driverCompanyPayMode(driver, state.settings) === "subscription"
+    : false;
+  const subStatusLabel: Record<string, string> = {
+    active: dict.driver.subStatusActive,
+    grace: dict.driver.subStatusGrace,
+    frozen: dict.driver.subStatusFrozen,
+    pending_payment: dict.driver.subStatusPending,
   };
 
   const photoUrl = profilePhotoUrl(state, user.id);
@@ -52,12 +103,29 @@ export default function ProfilePage() {
       phone: phone.trim(),
       email: email.trim(),
       ...(user!.role === "business" ? { business_name: businessName.trim() } : {}),
+      ...(user!.role === "business" && businessPin
+        ? {
+            business_address: businessAddress.trim(),
+            business_lat: businessPin.lat,
+            business_lng: businessPin.lng,
+          }
+        : {}),
     });
     if (err) {
       toast.error(err);
       return;
     }
     toast.success(dict.profile.saved);
+  }
+
+  function onSubscriptionPlan(plan: SubscriptionPlan) {
+    if (!driver || !user || driver.subscription_plan === plan) return;
+    const err = setDriverSubscriptionPlan(user.id, plan);
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    toast.success(dict.driver.planSaved);
   }
 
   function onPayPlan(mode: RevenueMode) {
@@ -77,8 +145,9 @@ export default function ProfilePage() {
     try {
       const dataUrl = await fileToAvatar(file);
       if (driver) {
-        addDocument(user!.id, "selfie", file.name, dataUrl);
-        toast.success(dict.profile.uploadedToast);
+        const err = addDocument(user!.id, "selfie", file.name, dataUrl);
+        if (err) toast.error(err);
+        else toast.success(dict.profile.uploadedToast);
       } else {
         const err = updateProfile(user!.id, { avatar_url: dataUrl });
         if (err) toast.error(err);
@@ -123,7 +192,7 @@ export default function ProfilePage() {
                   <ShieldCheck className="size-5 shrink-0 text-emerald-500" aria-label={dict.profile.verified} />
                 ) : null}
               </h1>
-              <p className="text-base capitalize text-muted-foreground">{user.role}</p>
+              <p className="text-base text-muted-foreground">{dict.roles[user.role]}</p>
               {driver ? (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Badge variant="secondary" className="gap-1">
@@ -173,12 +242,13 @@ export default function ProfilePage() {
               {user.role === "business" ? (
                 <div className="flex flex-col gap-2">
                   <Label className="text-base">{dict.profile.shopLocation}</Label>
-                  <p className="text-base text-muted-foreground">
-                    {user.business_address?.trim()
-                      ? locationLabel(user.business_address, user.business_lat, user.business_lng)
-                      : "—"}
-                  </p>
                   <p className="text-sm text-muted-foreground">{dict.profile.shopLocationReadonly}</p>
+                  <BusinessShopLocation
+                    shopAddress={businessAddress}
+                    shopPin={businessPin}
+                    onAddressChange={setBusinessAddress}
+                    onPinChange={setBusinessPin}
+                  />
                 </div>
               ) : null}
               {orderCosts ? (
@@ -230,8 +300,12 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {driver ? (
-          <Card className="border-2">
+        {/* One box for everything a driver pays Direct: how they pay, and — when
+            that is a subscription — the plan itself. `scroll-mt` keeps the
+            heading clear of the app header when /app/profile#subscription
+            jumps here from the money page. */}
+        {effectiveRole === "driver" && driver ? (
+          <Card id={SUBSCRIPTION_ANCHOR} className="scroll-mt-24 border-2">
             <CardHeader>
               <CardTitle className="text-2xl">{dict.profile.companyPayTitle}</CardTitle>
             </CardHeader>
@@ -251,7 +325,8 @@ export default function ProfilePage() {
                       value: "subscription" as const,
                       title: dict.profile.payPlanSubscription,
                       desc: fmt(dict.profile.payPlanSubscriptionDesc, {
-                        price: `$${state.settings.subscription_price_usd}`,
+                        daily: `$${subscriptionPriceUsd("daily", state.settings)}`,
+                        monthly: `$${subscriptionPriceUsd("monthly", state.settings)}`,
                       }),
                     },
                     {
@@ -282,18 +357,93 @@ export default function ProfilePage() {
                   );
                 })}
               </div>
+
+              {subscriptionMode ? (
+                <div className="flex flex-col gap-4 border-t pt-4">
+                  <h2 className="text-xl font-semibold">{dict.driver.subscriptionPlan}</h2>
+                  <div className="flex flex-wrap items-center gap-3 text-base">
+                    <Badge
+                      variant={
+                        driver.subscription_status === "active" ? "default" : "secondary"
+                      }
+                    >
+                      {subStatusLabel[driver.subscription_status] ?? driver.subscription_status}
+                    </Badge>
+                    {driver.subscription_ends_at ? (
+                      <span className="text-muted-foreground">
+                        {dict.driver.ends}:{" "}
+                        <SubscriptionCountdown endsAt={driver.subscription_ends_at} />
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">{dict.driver.notStarted}</span>
+                    )}
+                  </div>
+                  <div
+                    role="radiogroup"
+                    aria-label={dict.driver.subscriptionPlan}
+                    className="grid gap-3 sm:grid-cols-2"
+                  >
+                    {(
+                      [
+                        {
+                          value: "daily" as const,
+                          title: dict.driver.planDaily,
+                          desc: fmt(dict.driver.planDailyDesc, {
+                            price: `$${subscriptionPriceUsd("daily", state.settings)}`,
+                          }),
+                        },
+                        {
+                          value: "monthly" as const,
+                          title: dict.driver.planMonthly,
+                          desc: fmt(dict.driver.planMonthlyDesc, {
+                            price: `$${subscriptionPriceUsd("monthly", state.settings)}`,
+                          }),
+                        },
+                      ] as const
+                    ).map((opt) => {
+                      const selected = driver.subscription_plan === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => onSubscriptionPlan(opt.value)}
+                          className={cn(
+                            "touch-target flex min-h-11 flex-col items-start gap-1 rounded-xl border-2 p-4 text-start transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                            selected ? "border-primary bg-muted" : "border-border",
+                          )}
+                        >
+                          <span className="text-lg font-semibold">{opt.title}</span>
+                          <span className="text-base text-muted-foreground">{opt.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-base text-muted-foreground">
+                    {driver.subscription_plan === "daily"
+                      ? dict.driver.planDailyNote
+                      : fmt(dict.driver.planMonthlyNote, { days: state.settings.grace_days })}
+                  </p>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         ) : null}
 
-        {driver ? (
-          <Card className="border-2">
+        <Card className="border-2">
             <CardHeader>
-              <CardTitle className="text-2xl">{dict.profile.legalDocuments}</CardTitle>
+              <CardTitle className="text-2xl">
+                {isDriverDocs ? dict.profile.legalDocuments : dict.profile.identityDocuments}
+              </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <p className="text-base text-muted-foreground">{dict.profile.uploadDocsOptional}</p>
-              {DOC_TYPES.map((docType) => {
+              <p className="text-base text-muted-foreground">
+                {isDriverDocs
+                  ? dict.profile.uploadDocsOptional
+                  : dict.profile.uploadCustomerDocs}
+              </p>
+              {docTypes.map((docType) => {
                 const existing = state.documents.find(
                   (d) => d.driver_id === user.id && d.doc_type === docType,
                 );
@@ -311,8 +461,8 @@ export default function ProfilePage() {
                           </p>
                         ) : null}
                         {existing ? (
-                          <Badge variant="secondary" className="mt-1 capitalize">
-                            {existing.status}: {existing.file_name}
+                          <Badge variant="secondary" className="mt-1">
+                            {dict.docStatus[existing.status]}: {existing.file_name}
                           </Badge>
                         ) : (
                           <p className="text-base text-muted-foreground">
@@ -337,8 +487,9 @@ export default function ProfilePage() {
                                 updateProfile(user.id, { avatar_url: avatar });
                               }
                             }
-                            addDocument(user.id, docType, file.name, fileData);
-                            toast.success(dict.profile.uploadedToast);
+                            const err = addDocument(user.id, docType, file.name, fileData);
+                            if (err) toast.error(err);
+                            else toast.success(dict.profile.uploadedToast);
                             e.target.value = "";
                           }}
                         />
@@ -360,8 +511,7 @@ export default function ProfilePage() {
                 );
               })}
             </CardContent>
-          </Card>
-        ) : null}
+        </Card>
       </div>
   );
 }

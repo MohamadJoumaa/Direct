@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
+    "@direct/core": "*",
+    "@direct/i18n": "*",
     "@direct/shared": "*",
     "@vis.gl/react-google-maps": "^1.9.0",
     "class-variance-authority": "^0.7.1",
