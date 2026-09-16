@@ -30,7 +30,12 @@ config.resolver.disableHierarchicalLookup = false;
  * the trailing slash keeps them out of this branch.
  */
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName === "react" || moduleName.startsWith("react/")) {
+  if (
+    moduleName === "react" ||
+    moduleName.startsWith("react/") ||
+    moduleName === "react-dom" ||
+    moduleName.startsWith("react-dom/")
+  ) {
     return { type: "sourceFile", filePath: require.resolve(moduleName, { paths: [appModules] }) };
   }
   // react-native-maps has no web build. The browser is not a target, but
