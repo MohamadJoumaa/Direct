@@ -89,9 +89,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       const next = isLang(saved) ? saved : I18nManager.isRTL ? "ar" : "en";
       setLangState(next);
       setLangReady(true);
-      // A saved Arabic choice on a build that launched left-to-right (fresh
-      // install, or the flag was cleared) needs one corrective relaunch.
-      if (await applyDirection(next)) await restart();
+      await applyDirection(next);
     })();
     return () => {
       alive = false;
