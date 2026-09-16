@@ -82,7 +82,7 @@ export function LocationPicker({
           <MapView
             ref={mapRef}
             style={{ flex: 1 }}
-            provider={PROVIDER_GOOGLE}
+            provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
             initialRegion={regionAround(start, 2)}
             onRegionChangeComplete={(region: RNRegion) =>
               setCentre(fromCoordinate({ latitude: region.latitude, longitude: region.longitude }))

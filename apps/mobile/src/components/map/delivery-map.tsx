@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from "react";
-import { View, type ViewStyle } from "react-native";
+import { Platform, View, type ViewStyle } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import { Bike, MapPin, Package, Warehouse } from "lucide-react-native";
 import type { LatLng } from "@direct/shared";
@@ -85,7 +85,7 @@ export function DeliveryMap({
         style={{ flex: 1 }}
         // Google on Android (the only provider there); Apple Maps on iOS, which
         // needs no key and matches the platform's own look.
-        provider={PROVIDER_GOOGLE}
+        provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
         userInterfaceStyle={scheme}
         scrollEnabled={interactive}
