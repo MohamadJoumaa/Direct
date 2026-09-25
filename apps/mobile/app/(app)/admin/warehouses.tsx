@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Plus, Trash2 } from "lucide-react-native";
 
 import { LocationField, LocationPicker, type PickedLocation } from "@/components/map/location-picker";
+import { useLocationInput } from "@/hooks/use-location-input";
 import { Button, IconButton } from "@/components/ui/button";
 import { Card, EmptyState } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
@@ -135,7 +136,10 @@ function AddWarehouseSheet({
 }) {
   const { dict } = useI18n();
   const [name, setName] = useState("");
-  const [place, setPlace] = useState<PickedLocation | null>(null);
+  const placeInput = useLocationInput();
+  const place: PickedLocation | null = placeInput.point
+    ? { ...placeInput.point, label: placeInput.label }
+    : null;
   const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
@@ -153,7 +157,7 @@ function AddWarehouseSheet({
               if (!place) return;
               onAdd(name.trim(), place);
               setName("");
-              setPlace(null);
+              placeInput.reset();
             }}
           />
         }
@@ -161,16 +165,22 @@ function AddWarehouseSheet({
         <Field label={dict.admin.warehouseName} value={name} onChangeText={setName} />
         <LocationField
           label={dict.admin.address}
-          value={place?.label}
+          value={placeInput.text}
           placeholder={dict.admin.shopPinHint}
-          onPress={() => setPickerOpen(true)}
+          note={placeInput.note}
+          notePlaceholder={dict.client.locationNotePlaceholder}
+          hint={dict.client.locationTypeHint}
+          resolving={placeInput.resolving}
+          onChangeText={placeInput.setText}
+          onChangeNote={placeInput.setNote}
+          onPressMap={() => setPickerOpen(true)}
         />
       </Sheet>
 
       <LocationPicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        onPick={setPlace}
+        onPick={placeInput.applyPin}
         title={dict.admin.address}
         initial={place}
       />

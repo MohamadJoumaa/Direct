@@ -10,7 +10,7 @@ import { Row, Stack } from "@/components/ui/layout";
 import { Screen } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
 import { useAuth } from "@/lib/auth-context";
-import { useI18n } from "@/lib/i18n";
+import { formatDateTime, useI18n } from "@/lib/i18n";
 import { useStore } from "@/lib/store-context";
 import { useTheme } from "@/theme/theme-context";
 import { radius } from "@/theme/tokens";
@@ -96,7 +96,7 @@ export default function Notifications() {
                     {copy.body}
                   </Text>
                   <Text variant="caption" color="mutedForeground" numeric>
-                    {new Date(n.created_at).toLocaleString()}
+                    {formatDateTime(n.created_at)}
                   </Text>
                 </Stack>
               </Row>

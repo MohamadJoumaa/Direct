@@ -32,6 +32,15 @@ export type ScreenProps = {
  * The footer sits outside the scroll view so a primary action stays reachable
  * with one thumb no matter how long the page is -- the single biggest
  * difference between this and the website's layout.
+ *
+ * Keyboard: `behavior="padding"` on **both** platforms. Android used to pass
+ * `undefined`, which makes `KeyboardAvoidingView` a plain View that does
+ * nothing, on the assumption that `adjustResize` would shrink the window for
+ * us. Under `edgeToEdgeEnabled` (app.json) it does not — the window keeps its
+ * full height and the app is expected to consume the IME inset itself, so the
+ * keyboard simply covered whatever was being typed into. Padding the container
+ * shortens the scroll view, and a shortened scroll view brings the focused
+ * input back into view.
  */
 export function Screen({
   children,
@@ -56,12 +65,16 @@ export function Screen({
   return (
     <KeyboardAvoidingView
       style={[{ flex: 1, backgroundColor: colors.background }, style]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
     >
       {scroll ? (
         <ScrollView
           contentContainerStyle={{ flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
+          // iOS does the scroll-into-view itself given the inset; Android gets
+          // there through the resized container above.
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           showsVerticalScrollIndicator={false}
           refreshControl={
             onRefresh ? (

@@ -34,6 +34,9 @@ export type WhishOutcome = {
 /**
  * Create → open → poll → confirm, mirroring the website's hook.
  *
+ * PARKED alongside `lib/whish.ts` — see the note there. Nothing imports this
+ * while the company has no Whish merchant credentials.
+ *
  * The single rule this enforces: `onPaid` fires only after
  * `checkCollectStatus` re-verifies the collect by `externalId` and the raw
  * status is exactly "success". Closing the browser, a redirect, or a callback

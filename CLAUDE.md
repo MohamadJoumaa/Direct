@@ -271,6 +271,37 @@ sequence where a drop-off precedes its own pickup). **Google's `optimizeWaypoint
 not used** — it reorders freely and would schedule a drop-off before its pickup. Distances are
 injected: driving km via the Distance Matrix when Maps is up, haversine otherwise.
 
+### Automatic status (`auto-status.ts`)
+
+A delivery advances from the driver's GPS fix, not their thumb: `updateLocation`
+calls `applyAutoStatus`, which runs `nextAutoStatus` per active order and goes
+through `advanceOrder` so manual and automatic transitions share one code path.
+
+- `accepted` → `picked_up` inside `GEOFENCE_RADIUS_KM` (120 m) of the pickup.
+- `picked_up` → `in_transit` past `GEOFENCE_EXIT_KM` (250 m). The wider band is
+  one hysteresis gap — a jittering fix must not flip a status back and forth.
+- `in_transit` → `arrived` inside 120 m of the drop-off.
+- **Nothing past that.** `confirmDelivery` still needs both sides: standing at
+  an address is not the package changing hands.
+- Long-distance orders and orders whose stops are closer together than two exit
+  radii are skipped — the first has a warehouse hand-off, the second cannot be
+  told apart by one fix.
+- `applyAutoStatus` returns the **same state reference** when nothing advanced,
+  like `applySubscriptionFreeze`; it runs on every fix.
+
+The manual buttons remain as the override for a denied permission or a fix that
+never arrives, demoted to `outline` with a line saying it happens on its own.
+
+### Payment waiver = a free period, not a flag
+
+`setDriverPaymentWaived(state, id, true)` grants **one cycle** of the driver's
+own plan (`waiverGrantMs`): monthly +30 days, daily +24h, percentage +24h with
+the commission standing at that moment written off as a confirmed `commission`
+transaction, so the books show the forgiveness. Subscription time is added
+through `subscriptionEndsAt`, so it is additive — a driver with a week left
+keeps it. It expires on its own; an admin granting relief does not have to
+remember to revoke it.
+
 ### Delivery confirmation
 
 `confirmDelivery` needs **both** sides. The client must pass 1–5 stars; the driver just confirms.
@@ -377,9 +408,18 @@ exist on native.
 - `fmt(template, vars)` substitutes `{placeholders}`.
 - Language persists under `direct-lang` (localStorage on web, AsyncStorage in Expo); the web
   provider sets `document.documentElement.lang` and `dir`.
-- **On native, switching language relaunches the app.** React Native only mirrors layout after
-  `I18nManager.forceRTL` and a restart, so `apps/mobile/src/lib/i18n.tsx` flips the flag and calls
-  `Updates.reloadAsync()`. Without the relaunch you get Arabic strings in a left-to-right layout.
+- **On native, direction is a React prop, not the native flag.** `DirectionRoot` in
+  `apps/mobile/src/lib/i18n.tsx` puts Yoga's `direction` on the tree, which mirrors
+  `flexDirection: "row"`, `marginStart`/`paddingEnd` and the `insetInline*` props and is inherited,
+  so switching language turns the layout around on the next render — no relaunch. It replaced
+  `I18nManager.forceRTL` + `Updates.reloadAsync()`, which could not work: `forceRTL` only takes
+  effect at the *next cold start*, Expo Go cannot `reloadAsync` at all, and a JS-only reload does
+  not re-read the preference — so English kept rendering inside an Arabic right-to-left layout.
+  `forceRTL` is still written (`persistNativeDirection`) for what React does not own: the native
+  header's back arrow, system menus, and the first frame of the next launch.
+  **Every root needs its own `DirectionRoot`** — a `Modal` is hosted outside the tree it was
+  written in and inherits nothing, which is why `Sheet`, `LocationPicker` and the toast viewport
+  each declare direction again.
 - Notifications are **stored in English** but every kind except `generic` re-renders from the
   dictionary via `lib/notification-copy.ts`, so an Arabic reader sees Arabic whatever language it
   was written in.

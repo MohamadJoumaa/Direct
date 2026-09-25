@@ -18,7 +18,7 @@ import {
   profilePhotoUrl,
 } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
-import { orderStatusLabel, useI18n } from "@/lib/i18n";
+import { formatDate, orderStatusLabel, useI18n } from "@/lib/i18n";
 import { payMethodLabel, ReviewStatusBadge } from "../account-status";
 import { DriverAccountActions } from "../driver-account-actions";
 
@@ -118,7 +118,7 @@ export default function AdminDriverProfilePage() {
             </p>
             <p>
               <strong>{dict.admin.joined}:</strong>{" "}
-              {new Date(profile.created_at).toLocaleDateString()}
+              {formatDate(profile.created_at)}
             </p>
             <p>
               <strong>{dict.admin.companyPlan}:</strong>{" "}
@@ -140,7 +140,7 @@ export default function AdminDriverProfilePage() {
             {driver.subscription_ends_at ? (
               <p>
                 <strong>{dict.driver.ends}:</strong>{" "}
-                {new Date(driver.subscription_ends_at).toLocaleDateString()}{" "}
+                {formatDate(driver.subscription_ends_at)}{" "}
                 (<SubscriptionCountdown endsAt={driver.subscription_ends_at} />)
               </p>
             ) : null}

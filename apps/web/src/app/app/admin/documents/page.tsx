@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { allowedDocTypes, profilePhotoUrl } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
-import { useI18n } from "@/lib/i18n";
+import { formatDate, useI18n } from "@/lib/i18n";
 
 export default function AdminDocumentsPage() {
   const { isAdmin, user } = useAuth();
@@ -118,7 +118,7 @@ export default function AdminDocumentsPage() {
                               noPreview={dict.admin.noPreview}
                             />
                             <p className="text-xs text-muted-foreground">
-                              {new Date(doc.created_at).toLocaleDateString()}
+                              {formatDate(doc.created_at)}
                             </p>
                           </div>
                           {doc.status === "pending" ? (

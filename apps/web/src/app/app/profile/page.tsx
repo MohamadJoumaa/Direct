@@ -20,7 +20,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
 import { SubscriptionCountdown } from "@/components/subscription-countdown";
-import { allowedDocTypes, driverCompanyPayMode, profilePhotoUrl, type DocType } from "@/lib/demo-store";
+import {
+  allowedDocTypes,
+  driverCommissionTotals,
+  driverCompanyPayMode,
+  payModeSwitchBlock,
+  profilePhotoUrl,
+  type DocType,
+} from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
 import { useI18n, fmt } from "@/lib/i18n";
 import { fileToAvatar, fileToDocumentPreview } from "@/lib/image-file";
@@ -87,6 +94,18 @@ export default function ProfilePage() {
   const subscriptionMode = driver
     ? driverCompanyPayMode(driver, state.settings) === "subscription"
     : false;
+  // Changing how you pay is closed while a debt is open, or the two gates
+  // become an exit from each other — see `payModeSwitchBlock` in @direct/core.
+  // The Expo app locks the same choice with the same rule and copy.
+  const payModeBlock = driver ? payModeSwitchBlock(state, driver) : null;
+  const payModeLockNote =
+    driver && payModeBlock === "commission_due"
+      ? fmt(dict.profile.payPlanLockedCommission, {
+          amount: `$${driverCommissionTotals(state, driver.id).dueNow.toFixed(2)}`,
+        })
+      : payModeBlock === "subscription_frozen"
+        ? dict.profile.payPlanLockedFrozen
+        : null;
   const subStatusLabel: Record<string, string> = {
     active: dict.driver.subStatusActive,
     grace: dict.driver.subStatusGrace,
@@ -345,10 +364,16 @@ export default function ProfilePage() {
                       type="button"
                       role="radio"
                       aria-checked={selected}
+                      disabled={payModeBlock !== null && !selected}
                       onClick={() => onPayPlan(opt.value)}
                       className={cn(
                         "touch-target flex min-h-11 flex-col items-start gap-1 rounded-xl border-2 p-4 text-start transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                         selected ? "border-primary bg-muted" : "border-border",
+                        // The chosen option stays fully legible: this is "not
+                        // yet", not "not for you".
+                        payModeBlock !== null && !selected
+                          ? "cursor-not-allowed opacity-50 hover:bg-transparent"
+                          : "",
                       )}
                     >
                       <span className="text-lg font-semibold">{opt.title}</span>
@@ -357,6 +382,12 @@ export default function ProfilePage() {
                   );
                 })}
               </div>
+
+              {payModeLockNote ? (
+                <p role="status" className="text-base text-muted-foreground">
+                  {payModeLockNote}
+                </p>
+              ) : null}
 
               {subscriptionMode ? (
                 <div className="flex flex-col gap-4 border-t pt-4">

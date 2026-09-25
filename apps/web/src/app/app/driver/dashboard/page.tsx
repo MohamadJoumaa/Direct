@@ -7,6 +7,7 @@ import { driverCommissionTotals, driverCompanyPayMode, driverDailyProfit, driver
 import { LinkButton } from "@/components/link-button";
 import { DriverWhishActions } from "@/components/driver-whish-actions";
 import { SubscriptionCountdown } from "@/components/subscription-countdown";
+import { SubscriptionRenewGate } from "@/components/subscription-renew-gate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -26,7 +27,7 @@ import {
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useAuth } from "@/lib/auth-context";
 import { useStore } from "@/lib/store-context";
-import { fmt, useI18n } from "@/lib/i18n";
+import { fmt, formatDate, useI18n } from "@/lib/i18n";
 
 const chartConfig = {
   profit: { label: "Profit $", color: "var(--gold)" },
@@ -186,7 +187,7 @@ export default function DriverDashboardPage() {
                   {dict.driver.ends}:{" "}
                   <strong>
                     {driver.subscription_ends_at
-                      ? new Date(driver.subscription_ends_at).toLocaleDateString()
+                      ? formatDate(driver.subscription_ends_at)
                       : dict.driver.notStarted}
                   </strong>
                   {driver.subscription_ends_at ? (
@@ -228,7 +229,15 @@ export default function DriverDashboardPage() {
                 ) : null}
               </>
             )}
-            <DriverWhishActions kind={payDue.kind} dueAmount={payDue.amount} />
+            {/* Commission is money already due and always payable; a
+                subscription only opens inside the renewal window, the same
+                `isSubscriptionRenewable` rule the Expo app applies. */}
+            <SubscriptionRenewGate
+              endsAt={driver.subscription_ends_at}
+              alwaysOpen={payDue.kind === "commission"}
+            >
+              <DriverWhishActions kind={payDue.kind} dueAmount={payDue.amount} />
+            </SubscriptionRenewGate>
           </CardContent>
         </Card>
 

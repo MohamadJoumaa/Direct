@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import { Zap } from "lucide-react-native";
 import {
@@ -30,6 +30,7 @@ import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/lib/auth-context";
 import { fmt, useI18n } from "@/lib/i18n";
 import { measureRouteKm } from "@/lib/route-distance";
+import { useLocationInput } from "@/hooks/use-location-input";
 import { useStore } from "@/lib/store-context";
 import { useTheme } from "@/theme/theme-context";
 
@@ -53,8 +54,11 @@ export default function NewOrder() {
 
   const isBusiness = effectiveRole === "business";
 
-  const [pickup, setPickup] = useState<PickedLocation | null>(null);
-  const [dropoff, setDropoff] = useState<PickedLocation | null>(null);
+  // Typed landmark, note and resolved point per stop. `pickup` / `dropoff`
+  // below stay as the derived "we have a usable location" value, so the quote,
+  // the map and the submit gate did not have to change shape.
+  const pickupInput = useLocationInput();
+  const dropoffInput = useLocationInput();
   const [picking, setPicking] = useState<Target>(null);
   const [description, setDescription] = useState("");
   const [urgent, setUrgent] = useState(false);
@@ -64,16 +68,26 @@ export default function NewOrder() {
   const [measuring, setMeasuring] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const pickup: PickedLocation | null = pickupInput.point
+    ? { ...pickupInput.point, label: pickupInput.label }
+    : null;
+  const dropoff: PickedLocation | null = dropoffInput.point
+    ? { ...dropoffInput.point, label: dropoffInput.label }
+    : null;
+
   // A business ships from its shop by default, but is free to change it: the
   // shop is a pre-fill, not a constraint.
+  const prefilled = useRef(false);
   useEffect(() => {
-    if (!isBusiness || pickup || !user?.business_lat || !user?.business_lng) return;
-    setPickup({
+    if (prefilled.current) return;
+    if (!isBusiness || !user?.business_lat || !user?.business_lng) return;
+    prefilled.current = true;
+    pickupInput.applyPin({
       lat: user.business_lat,
       lng: user.business_lng,
       label: locationLabel(user.business_address, user.business_lat, user.business_lng, lang),
     });
-  }, [isBusiness, pickup, user, lang]);
+  }, [isBusiness, user, lang, pickupInput]);
 
   // Driving distance, measured the same way the store will measure it.
   useEffect(() => {
@@ -145,7 +159,7 @@ export default function NewOrder() {
       return;
     }
     toast.success(fmt(dict.order.placedToast, { number: `#${result.orderNumber}` }));
-    setDropoff(null);
+    dropoffInput.reset();
     setDescription("");
     setUrgent(false);
     setEditingPrice(false);
@@ -173,16 +187,36 @@ export default function NewOrder() {
           <Stack gap="md">
             <LocationField
               label={dict.order.pickupAddress}
-              value={pickup?.label}
+              value={pickupInput.text}
               placeholder={dict.order.setPickup}
-              onPress={() => setPicking("pickup")}
+              note={pickupInput.note}
+              notePlaceholder={dict.client.locationNotePlaceholder}
+              hint={dict.client.locationTypeHint}
+              resolving={pickupInput.resolving}
+              onChangeText={pickupInput.setText}
+              onChangeNote={pickupInput.setNote}
+              onPressMap={() => setPicking("pickup")}
             />
             <LocationField
               label={dict.order.dropoffAddress}
-              value={dropoff?.label}
+              value={dropoffInput.text}
               placeholder={dict.order.setDropoff}
-              onPress={() => setPicking("dropoff")}
+              note={dropoffInput.note}
+              notePlaceholder={dict.client.locationNotePlaceholder}
+              resolving={dropoffInput.resolving}
+              onChangeText={dropoffInput.setText}
+              onChangeNote={dropoffInput.setNote}
+              onPressMap={() => setPicking("dropoff")}
             />
+            {/* Named, but not found. Said here rather than on submit, so the
+                person can fix it while they are still looking at the field. */}
+            {[pickupInput, dropoffInput].some(
+              (i) => i.text.trim().length >= 3 && !i.resolving && !i.point,
+            ) ? (
+              <Text variant="caption" color="warning">
+                {dict.client.locationNotFound}
+              </Text>
+            ) : null}
             {isBusiness ? (
               <Text variant="caption" color="mutedForeground">
                 {dict.order.shopPickupHint}
@@ -319,7 +353,9 @@ export default function NewOrder() {
       <LocationPicker
         open={picking != null}
         onClose={() => setPicking(null)}
-        onPick={(picked) => (picking === "pickup" ? setPickup(picked) : setDropoff(picked))}
+        onPick={(picked) =>
+          picking === "pickup" ? pickupInput.applyPin(picked) : dropoffInput.applyPin(picked)
+        }
         title={picking === "pickup" ? dict.order.setPickup : dict.order.setDropoff}
         initial={picking === "pickup" ? pickup : dropoff}
       />

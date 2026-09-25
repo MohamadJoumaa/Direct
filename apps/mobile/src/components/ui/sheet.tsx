@@ -1,10 +1,11 @@
 import React from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
 import { IconButton } from "./button";
 import { Row, Stack } from "./layout";
 import { Text } from "./text";
+import { DirectionRoot } from "@/lib/i18n";
 import { useTheme } from "@/theme/theme-context";
 import { radius, space } from "@/theme/tokens";
 
@@ -41,7 +42,13 @@ export function Sheet({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={{ flex: 1, justifyContent: "flex-end" }}>
+      {/* A Modal is its own root and inherits nothing from the app frame, so
+          the writing direction has to be re-declared inside it. */}
+      <DirectionRoot>
+        {/* The sheet has its own keyboard handling: a Modal is a separate root,
+            so the Screen's KeyboardAvoidingView is not above it and a field in
+            here (the Whish reference, say) would sit under the keyboard. */}
+        <KeyboardAvoidingView style={{ flex: 1, justifyContent: "flex-end" }} behavior="padding">
         <Pressable
           accessibilityLabel="Close"
           onPress={onClose}
@@ -104,7 +111,8 @@ export function Sheet({
             {footer}
           </View>
         </View>
-      </View>
+        </KeyboardAvoidingView>
+      </DirectionRoot>
     </Modal>
   );
 }

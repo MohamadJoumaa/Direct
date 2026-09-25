@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react-native";
 import { Row } from "./layout";
 import { Text } from "./text";
+import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/theme/theme-context";
 import { duration, radius, space } from "@/theme/tokens";
 
@@ -76,6 +77,7 @@ function ToastViewport({
   onDismiss: (id: number) => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { dir } = useI18n();
   if (toasts.length === 0) return null;
 
   return (
@@ -87,6 +89,10 @@ function ToastViewport({
         insetInlineStart: space.md,
         insetInlineEnd: space.md,
         gap: space.sm,
+        // The viewport is a sibling of the app frame, not a child of it, so it
+        // is outside `DirectionRoot` and has to declare its own direction —
+        // otherwise a toast's icon and text sit on the wrong side of the card.
+        direction: dir,
       }}
     >
       {toasts.map((t) => (

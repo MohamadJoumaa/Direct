@@ -373,16 +373,27 @@ export {
 export {
   SUBSCRIPTION_PLANS,
   SUBSCRIPTION_PLAN_MS,
+  SUBSCRIPTION_RENEW_WINDOW_DAYS,
   subscriptionPriceUsd,
   subscriptionEndsAt,
   subscriptionGraceMs,
   subscriptionRemaining,
+  isSubscriptionRenewable,
   formatSubscriptionRemaining,
   type SubscriptionPlan,
   type SubscriptionRemaining,
 } from "./subscription";
 
 export { sequenceStops, type RouteStop, type LatLng } from "./route-plan";
+
+export {
+  GEOFENCE_RADIUS_KM,
+  GEOFENCE_EXIT_KM,
+  nextAutoStatus,
+  stopsAreDistinguishable,
+  type AutoStatusAction,
+  type AutoStatusInput,
+} from "./auto-status";
 
 export {
   roundUsd,

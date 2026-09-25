@@ -189,11 +189,6 @@ export const ar: Dictionary = {
       "محلّك هو موقع الاستلام الافتراضي لكل طلب. يمكنك تغييره في كل طلب لاحقاً.",
     pinRequired: "حدّد موقع محلك على الخريطة",
     driverType: "نوع السائق",
-    driverTypeHint: "يمكنك أن تطلب من المشرف تغييره لاحقاً.",
-    driverTypeFast: "سائق سريع",
-    driverTypeFastDesc: "مشاوير قصيرة داخل المدينة.",
-    driverTypeLong: "سائق مسافات طويلة",
-    driverTypeLongDesc: "بين المدن والمناطق البعيدة.",
     startSignUp: "ابدأ",
     resumeSignUp: "متابعة التسجيل",
     signUpIntro: "خطوتان سريعتان: اختر دورك، ثم املأ ما يحتاجه.",
@@ -279,6 +274,10 @@ export const ar: Dictionary = {
     trackingHint: "سائقك على الخريطة — تابعه حتى الوجهة التالية",
     mapsMissingKey:
       "أضف NEXT_PUBLIC_GOOGLE_MAPS_API_KEY لعرض خرائط غوغل. ستظهر نقاط الاستلام والتسليم والسائقين في القائمة أدناه.",
+    locationTypeHint:
+      "اكتب اسم محل أو مبنى أو معلم قريب، ثم أضف التفاصيل التي توصل السائق إلى الباب. اضغط على الدبوس لفتح الخريطة.",
+    locationNotePlaceholder: "الموقع بالتحديد — الطابق، البوابة، لون المبنى…",
+    locationNotFound: "لم نجد هذا المكان. جرّب معلماً قريباً أو اضغط على الدبوس لتحديده على الخريطة.",
     mapsMissingKeyMobile:
       "أضف EXPO_PUBLIC_GOOGLE_MAPS_API_KEY لعرض الخريطة. ستظهر نقاط الاستلام والتسليم والسائقين في القائمة أدناه.",
     mapsAuthFailed:
@@ -327,6 +326,28 @@ export const ar: Dictionary = {
     couldNotCheckPayment: "تعذّر التحقق من الدفع الآن",
     whishSupportNumber:
       "رقم دايركت على Whish {number} للدعم فقط. يُؤكَّد الدفع عبر Whish Pay وليس بالتحويل إلى هذا الرقم.",
+    renewWindowHint: "يفتح التجديد في آخر {days} أيام قبل انتهاء اشتراكك.",
+    whishSendTo: "التحويل إلى",
+    whishTransferHow:
+      "افتح Whish واختر إرسال الأموال ← Whish to Whish، ثم الصق الرقم {number} وأرسل {amount}.",
+    whishOpenApp: "افتح تطبيق Whish",
+    whishOpenAgain: "افتح Whish مجدداً",
+    whishOpenedWeb: "فتحنا Whish. إذا لم يفتح التطبيق، أرسل المبلغ من Whish بنفسك.",
+    whishNoApp: "لا تملك تطبيق Whish؟",
+    whishAwaitingTitle: "بانتظار التأكيد",
+    whishAwaitingHint: "قد يستغرق ذلك بضع دقائق.",
+    whishOpenFailed:
+      "تعذّر فتح Whish. أرسل {amount} إلى {number} من تطبيق Whish ثم أكّد هنا.",
+    whishNotFound:
+      "لم نجد تطبيق Whish على هذا الهاتف. أرسل {amount} إلى {number} من Whish ثم أكّد هنا.",
+    whishConfirmSent: "أرسلت المبلغ — تأكيد",
+    whishConfirmBody:
+      "أكّد فقط بعد خروج المبلغ فعلياً من حسابك في Whish. يتحقّق المشرف من التحويل قبل تفعيل حسابك.",
+    whishReference: "رقم عملية Whish (اختياري)",
+    whishReferenceHint:
+      "رقم العملية الذي يعرضه Whish بعد الإرسال. يساعد المشرف على إيجاد تحويلك.",
+    whishCopiedNumber: "نُسخ الرقم",
+    whishCopiedAmount: "نُسخ المبلغ",
     gracePeriod: "فترة سماح",
     graceRenewBody:
       "جدّد قريباً وإلا يُجمَّد حسابك بعد {days} أيام. يمكنك الدفع الآن عبر Whish Pay.",
@@ -387,6 +408,9 @@ export const ar: Dictionary = {
     planSaved: "تم تحديث الخطة",
     planDailyNote: "تنتهي الخطة اليومية بعد 24 ساعة بالضبط من الدفع — بلا أيام سماح.",
     planMonthlyNote: "تمنحك الخطة الشهرية {days} أيام سماح بعد انتهائها.",
+    autoStatusHint: "تتحدّث الحالة تلقائياً عند وصولك إلى كل نقطة — استخدم الزر فقط إذا لم تتحدّث.",
+    planDailyEndsGrace:
+      "أنت في أيام السماح. التحويل إلى الخطة اليومية ينهيها فوراً لأن الخطة اليومية بلا سماح.",
     subStatusActive: "فعّال",
     subStatusGrace: "فترة سماح",
     subStatusFrozen: "مجمَّد",
@@ -405,6 +429,12 @@ export const ar: Dictionary = {
     docVehicle: "رخصة السير",
     docLicense: "رخصة القيادة",
     selfieHint: "تُستخدم هذه الصورة كصورتك الشخصية في الحساب.",
+    docSource: "إضافة مستند",
+    docSourceHint: "التقط صورة جديدة أو اختر صورة موجودة لديك.",
+    takePhoto: "التقاط صورة",
+    chooseFromGallery: "الاختيار من المعرض",
+    cameraDenied: "رُفض إذن الكاميرا. فعّله من الإعدادات أو اختر صورة من المعرض.",
+    galleryDenied: "رُفض إذن الصور. فعّله من الإعدادات أو التقط صورة بدلاً من ذلك.",
     legalDocuments: "المستندات القانونية",
     identityDocuments: "مستندات الهوية",
     uploadDocsOptional: "ارفع مستنداتك للتوثيق. بعد الموافقة عليها كلها، ستحصل على شارة موثوق.",
@@ -424,6 +454,16 @@ export const ar: Dictionary = {
     payPlanPercentage: "نسبة من كل طلب",
     payPlanPercentageDesc: "{pct}% من كل توصيل تذهب إلى دايركت",
     payPlanSaved: "تم تحديث خطة الدفع",
+    payPlanLockedCommission: "ادفع {amount} المستحقة لدايركت قبل تغيير طريقة الدفع.",
+    payPlanLockedFrozen: "اشتراكك مجمّد. ادفعه قبل أن تتمكّن من تغيير طريقة الدفع.",
+    payPlanCurrent: "طريقة الدفع",
+    payPlanConfirmTitle: "تغيير طريقة الدفع؟",
+    payPlanConfirmToSubscription: "ستدفع لدايركت اشتراكاً بدل نسبة من كل توصيل.",
+    payPlanConfirmToPercentage: "ستأخذ دايركت {pct}% من كل توصيل بدل الاشتراك.",
+    payPlanUndoWindow:
+      "أمامك {minutes} دقائق لتغيير رأيك. بعدها عليك تسوية ما عليك قبل التبديل مجدداً.",
+    payPlanUndoLeft: "ما زال بإمكانك العودة خلال {minutes} دقائق.",
+    payPlanConfirmAction: "نعم، غيّرها",
   },
   admin: {
     allOrders: "كل الطلبات",

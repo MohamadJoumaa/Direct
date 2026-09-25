@@ -122,11 +122,20 @@ deployed Next.js routes (`/api/whish/create`, `/api/whish/status`) at
 
 EN/AR from `@direct/i18n`; adding a key means adding it to both dictionaries.
 
-Switching to Arabic calls `I18nManager.forceRTL` and then relaunches through
-`expo-updates`. React Native only mirrors layout after a restart, so the relaunch
-is not optional — without it the app would show Arabic strings in a
-left-to-right layout. Use logical styles (`marginStart`, `paddingEnd`,
-`textAlign: "left"`) everywhere; they flip for free.
+Direction is React state. `DirectionRoot` (`src/lib/i18n.tsx`) sets Yoga's
+`direction` on the tree; it is inherited, so the whole app mirrors on the next
+render and switching language is instant.
+
+It is deliberately **not** `I18nManager.forceRTL` + a relaunch. That flag only
+applies at the next cold start, Expo Go cannot `Updates.reloadAsync()`, and a
+JS-only reload does not re-read it — which is how the app ended up stuck
+laying English out right-to-left. The flag is still written, so the native
+stack header and the next launch's first frame agree with the language.
+
+A `Modal` is its own root and inherits nothing, so `Sheet`, `LocationPicker`
+and the toast viewport each declare direction again. Use logical styles
+(`marginStart`, `paddingEnd`, `insetInlineStart`) everywhere; Yoga flips them
+for free. Physical `left`/`right` do not flip — avoid them.
 
 ---
 

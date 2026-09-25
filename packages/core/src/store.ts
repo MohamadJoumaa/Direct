@@ -21,10 +21,13 @@ import {
   commissionDueNowUsd,
   isDriverPaymentBlockingWork,
   workDayStart,
+  SUBSCRIPTION_PLAN_MS,
   subscriptionEndsAt,
   subscriptionGraceMs,
   subscriptionPriceUsd,
   type BusinessOrderCosts,
+  nextAutoStatus,
+  stopsAreDistinguishable,
   type CompanySettings,
   type DriverType,
   type OrderStatus,
@@ -86,6 +89,9 @@ export type Driver = {
   payment_waived: boolean;
   /** How this driver pays Direct — chosen on their profile. */
   revenue_mode: RevenueMode;
+  /** When the driver last changed how they pay. Drives the undo window in
+   *  `payModeSwitchBlock`; null for a driver who has never changed it. */
+  revenue_mode_changed_at?: string | null;
 };
 
 export function driverCompanyPayMode(
@@ -747,6 +753,9 @@ export function migrateState(parsed: DemoState): DemoState {
       banned: d.banned ?? false,
       payment_waived: d.payment_waived ?? false,
       revenue_mode: d.revenue_mode ?? parsed.settings?.revenue_mode ?? "subscription",
+      // Null rather than "now": a driver who has been on their plan since
+      // before this field existed is not inside an undo window.
+      revenue_mode_changed_at: d.revenue_mode_changed_at ?? null,
       subscription_plan: d.subscription_plan ?? "monthly",
     })),
     orders: (parsed.orders ?? []).map((o) => ({
@@ -1472,7 +1481,60 @@ export function updateLocation(
         ...state.locations,
         { driver_id: driverId, lat, lng, updated_at: new Date().toISOString() },
       ];
-  return { ...state, locations };
+  // Every fix is also a chance for a delivery to have reached its next stop.
+  // Hooking it here rather than on the 5s interval means both clients get it
+  // from the one call they already make, and the position the rule reads is
+  // the one that just arrived rather than one tick old.
+  return applyAutoStatus({ ...state, locations }, driverId);
+}
+
+/**
+ * Move every active order along that the driver's position says has moved.
+ *
+ * Runs off the fix the client just wrote, so it needs no clock of its own, and
+ * it goes through `advanceOrder` rather than writing statuses itself — one code
+ * path for a status change, whichever hand triggers it, so the event trail and
+ * the `is_busy` bookkeeping cannot drift between the manual and the automatic
+ * route.
+ *
+ * Returns **the same state reference** when nothing advanced. That is the same
+ * contract `applySubscriptionFreeze` keeps, and for the same reason: this is
+ * called on every GPS tick, and allocating a fresh object each time would
+ * re-render and re-save the whole store forever.
+ */
+export function applyAutoStatus(state: DemoState, driverId: string): DemoState {
+  const position = state.locations.find((l) => l.driver_id === driverId);
+  if (!position) return state;
+
+  let next = state;
+  for (const order of state.orders) {
+    if (order.assigned_driver_id !== driverId) continue;
+
+    // Pickup and drop-off within two geofences of each other cannot be told
+    // apart by a single fix — such an order would run itself from accepted to
+    // arrived without the driver moving, so it stays manual.
+    if (
+      !stopsAreDistinguishable(
+        { lat: order.pickup_lat, lng: order.pickup_lng },
+        { lat: order.dropoff_lat, lng: order.dropoff_lng },
+      )
+    ) {
+      continue;
+    }
+
+    const action = nextAutoStatus({
+      status: order.status,
+      pickup: { lat: order.pickup_lat, lng: order.pickup_lng },
+      dropoff: { lat: order.dropoff_lat, lng: order.dropoff_lng },
+      driver: { lat: position.lat, lng: position.lng },
+      isLongDistance: order.order_type === "long_distance",
+    });
+    if (!action) continue;
+
+    const result = advanceOrder(next, order.id, driverId, action);
+    if (!result.error) next = result.state;
+  }
+  return next;
 }
 
 export function setOnline(
@@ -1529,6 +1591,10 @@ export type RequestPayOpts = {
   externalId?: string;
   kind?: WhishKind;
   amount?: number;
+  /** Transfer reference the driver copied out of Whish, appended to the note
+   *  so the admin confirming the row can match it against the company account.
+   *  Never proof of anything — it is a free-text string the driver typed. */
+  reference?: string;
 };
 
 export function driverPayDueUsd(
@@ -1555,12 +1621,29 @@ export function pendingApiWhishTx(
   driverId: string,
   kind: WhishKind,
 ): WhishTx | undefined {
+  return pendingWhishTx(state, driverId, kind, "api");
+}
+
+/**
+ * The driver's open request of this kind, whichever way it was raised.
+ *
+ * The Expo app needs the `manual` side of this: a Whish -> Whish transfer is
+ * confirmed by an admin, so between "I sent it" and that confirmation the
+ * driver must see their own pending row rather than a pay button that invites
+ * them to send the money twice.
+ */
+export function pendingWhishTx(
+  state: DemoState,
+  driverId: string,
+  kind: WhishKind,
+  source?: "api" | "manual",
+): WhishTx | undefined {
   return state.whish.find(
     (t) =>
       t.driver_id === driverId &&
-      t.source === "api" &&
       t.status === "pending" &&
-      t.kind === kind,
+      t.kind === kind &&
+      (source == null || t.source === source),
   );
 }
 
@@ -1587,30 +1670,34 @@ export function requestSubscriptionPayment(
   if (kind === "commission" && amount <= 0) return state;
   const profile = state.profiles.find((p) => p.id === driverId);
   const source = opts?.source ?? "manual";
-  const note = opts?.externalId
+  const base = opts?.externalId
     ? `Whish collect ${opts.externalId}`
     : kind === "commission"
       ? `Direct commission — ${profile?.full_name ?? "driver"}`
       : `Whish Pay ${state.settings.whish_number}`;
+  const reference = opts?.reference?.trim();
+  const note = reference ? `${base} · ref ${reference}` : base;
 
-  if (source === "api") {
-    const existing = pendingApiWhishTx(state, driverId, kind);
-    if (existing) {
-      return {
-        ...state,
-        whish: state.whish.map((t) =>
-          t.id === existing.id
-            ? {
-                ...t,
-                amount_usd: amount,
-                plan: kind === "subscription" ? plan : t.plan,
-                note,
-                external_id: opts?.externalId ?? t.external_id,
-              }
-            : t,
-        ),
-      };
-    }
+  // One open row per driver per kind, for both sources. A driver who taps
+  // "I sent it" twice, or returns to a collect they already started, must
+  // update that request — a second pending row would read to the admin as a
+  // second payment owed.
+  const existing = pendingWhishTx(state, driverId, kind, source);
+  if (existing) {
+    return {
+      ...state,
+      whish: state.whish.map((t) =>
+        t.id === existing.id
+          ? {
+              ...t,
+              amount_usd: amount,
+              plan: kind === "subscription" ? plan : t.plan,
+              note,
+              external_id: opts?.externalId ?? t.external_id,
+            }
+          : t,
+      ),
+    };
   }
 
   const tx: WhishTx = {
@@ -2296,6 +2383,70 @@ export function updateProfile(
   return { state: { ...state, profiles } };
 }
 
+/** Why a driver may not change how they pay Direct right now. */
+export type PayModeSwitchBlock = "commission_due" | "subscription_frozen";
+
+/**
+ * How long a pay-mode change stays freely reversible.
+ *
+ * Someone opening the app for the first time taps both options to see what
+ * they do. Without this they could land on percentage, and — the moment a
+ * single delivery completes and a cut is owed — be locked out of going back
+ * over a debt of a few cents they never meant to incur. Five minutes is long
+ * enough to undo a curious tap and far too short to work a shift behind.
+ */
+export const PAY_MODE_UNDO_WINDOW_MS = 5 * 60 * 1000;
+
+/** Milliseconds left in that window, or 0 once it has closed. */
+export function payModeUndoMsLeft(
+  driver: Pick<Driver, "revenue_mode_changed_at">,
+  nowMs: number = Date.now(),
+): number {
+  if (!driver.revenue_mode_changed_at) return 0;
+  const changedAt = new Date(driver.revenue_mode_changed_at).getTime();
+  if (!Number.isFinite(changedAt)) return 0;
+  return Math.max(0, changedAt + PAY_MODE_UNDO_WINDOW_MS - nowMs);
+}
+
+/**
+ * Whether changing pay mode is currently allowed, and if not, why.
+ *
+ * The two modes are gated by different facts — percentage by `dueNow`,
+ * subscription by `subscription_status` — so switching used to be a way to
+ * walk away from a debt: a driver owing a day of commission could pick
+ * "Subscription" and the commission stopped blocking work, and a driver frozen
+ * for an unpaid subscription could pick "Percentage", whose `dueNow` is zero
+ * because their completed orders were split at 0% company cut. Neither debt
+ * disappears from the books; both simply stopped being asked for.
+ *
+ * So the switch is closed while money is actually owed:
+ *
+ *  - percentage with `dueNow > 0` — real money, already earned by Direct;
+ *  - subscription `frozen` — they paid before and fell behind.
+ *
+ * Deliberately NOT blocked: `pending_payment` (a brand-new driver owes nothing
+ * yet, and this choice is the first one they make), `grace` (not in default),
+ * and any driver an admin has waived — a waiver always wins, as everywhere else.
+ *
+ * The UI calls this to disable the option and explain itself; the mutation
+ * calls it again so the rule holds however the mutation is reached.
+ */
+export function payModeSwitchBlock(
+  state: DemoState,
+  driver: Driver,
+  nowMs: number = Date.now(),
+): PayModeSwitchBlock | null {
+  if (driver.payment_waived) return null;
+  // Inside the undo window the answer is always "yes, go back" — that is the
+  // whole point of the window, and it costs nothing: five minutes of
+  // percentage work is at most one delivery's cut.
+  if (payModeUndoMsLeft(driver, nowMs) > 0) return null;
+  if (driverCompanyPayMode(driver, state.settings) === "percentage") {
+    return driverCommissionTotals(state, driver.id).dueNow > 0 ? "commission_due" : null;
+  }
+  return driver.subscription_status === "frozen" ? "subscription_frozen" : null;
+}
+
 export function setDriverRevenueMode(
   state: DemoState,
   driverId: string,
@@ -2303,8 +2454,22 @@ export function setDriverRevenueMode(
 ): { state: DemoState; error?: string } {
   const driver = state.drivers.find((d) => d.id === driverId);
   if (!driver) return { state, error: "Driver not found" };
+  // Picking the mode already in effect is not a change; let it through rather
+  // than refusing a tap that does nothing.
+  if (driverCompanyPayMode(driver, state.settings) === revenue_mode) return { state };
+
+  const blocked = payModeSwitchBlock(state, driver);
+  if (blocked === "commission_due") {
+    return { state, error: "Pay what you owe Direct before changing how you pay" };
+  }
+  if (blocked === "subscription_frozen") {
+    return { state, error: "Your subscription is frozen — pay it before changing how you pay" };
+  }
+
   const drivers = state.drivers.map((d) =>
-    d.id === driverId ? { ...d, revenue_mode } : d,
+    d.id === driverId
+      ? { ...d, revenue_mode, revenue_mode_changed_at: new Date().toISOString() }
+      : d,
   );
   return { state: applySubscriptionFreeze({ ...state, drivers }) };
 }
@@ -2391,7 +2556,13 @@ export function driverDailyProfit(
   return Array.from({ length: days }, (_, i) => {
     const from = dayStart(i - days + 1);
     const to = dayStart(i - days + 2);
-    const label = from.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    // day/month, not the device's idea of a short date: this axis sits beside
+    // dates rendered by `formatDayMonth` in @direct/i18n and has to match.
+    // Inlined because @direct/core deliberately carries no dependency on the
+    // dictionaries — it is state, not strings.
+    const label = `${String(from.getDate()).padStart(2, "0")}/${String(
+      from.getMonth() + 1,
+    ).padStart(2, "0")}`;
     return { label, ...sumRange(from.getTime(), to.getTime()) };
   });
 }
@@ -2673,6 +2844,42 @@ export function setDriverAccountAction(
   };
 }
 
+/**
+ * How long "work unpaid" buys the driver, by how they pay.
+ *
+ * A monthly driver gets a month, a daily driver a day, and a percentage driver
+ * a day — their plan's own period, so the grant means the same thing to
+ * everyone: one billing cycle on the house.
+ */
+function formatWaiverWindow(ms: number): string {
+  const days = Math.round(ms / (24 * 60 * 60 * 1000));
+  return days <= 1 ? "24 hours" : `${days} days`;
+}
+
+export function waiverGrantMs(
+  driver: Pick<Driver, "revenue_mode" | "subscription_plan">,
+  settings?: Pick<CompanySettings, "revenue_mode">,
+): number {
+  const mode = driverCompanyPayMode(driver, settings);
+  if (mode === "percentage") return SUBSCRIPTION_PLAN_MS.daily;
+  return SUBSCRIPTION_PLAN_MS[driver.subscription_plan ?? "monthly"];
+}
+
+/**
+ * Let a driver work without paying, for one cycle.
+ *
+ * Granting it is not a flag any more, it is *time*: the subscription is
+ * extended by the driver's own plan length (additively, through
+ * `subscriptionEndsAt`, so a driver with a week left keeps that week and gains
+ * a month on top), and a percentage driver has the commission standing against
+ * them right now written off with a confirmed zero-value transaction, so the
+ * books show the forgiveness instead of the debt quietly ceasing to block.
+ *
+ * It expires on its own. That is the point: an admin granting relief at 2am
+ * should not also have to remember to revoke it, and `payment_waived` left true
+ * forever is how a driver ends up permanently free. The flag still exists for
+ * the admin's explicit on/off, but the *grant* no longer depends on it.
+ */
 export function setDriverPaymentWaived(
   state: DemoState,
   driverId: string,
@@ -2685,11 +2892,59 @@ export function setDriverPaymentWaived(
   const driver = state.drivers.find((d) => d.id === driverId);
   if (!driver) return { state, error: "Driver not found" };
 
+  const mode = driverCompanyPayMode(driver, state.settings);
+  const now = Date.now();
+  const grantMs = waiverGrantMs(driver, state.settings);
+
+  // Percentage drivers have no subscription to extend; what blocks them is
+  // `dueNow`, so the grant is a confirmed commission payment of the amount
+  // outstanding. Zero-value when nothing is owed, which keeps the trail honest
+  // without inventing income.
+  const forgiven =
+    waived && mode === "percentage" ? driverCommissionTotals(state, driverId).dueNow : 0;
+  const whish =
+    waived && mode === "percentage"
+      ? [
+          {
+            id: uid(),
+            driver_id: driverId,
+            amount_usd: forgiven,
+            phone_ref: profile?.phone ?? "",
+            source: "manual" as const,
+            status: "confirmed" as const,
+            kind: "commission" as const,
+            note: `Waived by admin — ${formatWaiverWindow(grantMs)} free`,
+            external_id: null,
+            created_at: new Date(now).toISOString(),
+            confirmed_at: new Date(now).toISOString(),
+          },
+          ...state.whish,
+        ]
+      : state.whish;
+
   return {
     state: {
       ...state,
+      whish,
       drivers: state.drivers.map((d) =>
-        d.id === driverId ? { ...d, payment_waived: waived } : d,
+        d.id === driverId
+          ? {
+              ...d,
+              payment_waived: waived,
+              ...(waived && mode !== "percentage"
+                ? {
+                    subscription_status: "active" as const,
+                    subscription_ends_at: new Date(
+                      subscriptionEndsAt(
+                        d.subscription_plan ?? "monthly",
+                        d.subscription_ends_at ? new Date(d.subscription_ends_at).getTime() : null,
+                        now,
+                      ),
+                    ).toISOString(),
+                  }
+                : {}),
+            }
+          : d,
       ),
       notifications: [
         {
@@ -2697,7 +2952,7 @@ export function setDriverPaymentWaived(
           user_id: driverId,
           title: waived ? "Payment not required" : "Payment required again",
           body: waived
-            ? "An admin allowed you to keep working even if subscription or commission is unpaid."
+            ? `An admin gave you ${formatWaiverWindow(grantMs)} free. Keep working — nothing to pay until it ends.`
             : "An admin restored the payment requirement. Pay to keep taking orders.",
           read: false,
           created_at: new Date().toISOString(),

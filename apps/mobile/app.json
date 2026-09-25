@@ -17,7 +17,12 @@
         "UIBackgroundModes": [
           "location"
         ],
-        "CFBundleAllowMixedLocalizations": true
+        "CFBundleAllowMixedLocalizations": true,
+        "LSApplicationQueriesSchemes": [
+          "whish",
+          "whishmoney",
+          "whishmoney.app"
+        ]
       }
     },
     "android": {

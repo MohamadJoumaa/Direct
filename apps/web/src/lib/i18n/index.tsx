@@ -13,7 +13,15 @@ import {
 // Dictionaries and the pure string helpers live in @direct/i18n so Expo reads
 // the same copy; only this provider — which drives the document direction — is
 // web-specific. Pages keep importing everything from "@/lib/i18n".
-export { fmt, orderStatusLabel, orderTypeLabel } from "@direct/i18n";
+export {
+  fmt,
+  formatDate,
+  formatDateTime,
+  formatDayMonth,
+  formatTime,
+  orderStatusLabel,
+  orderTypeLabel,
+} from "@direct/i18n";
 export type { Dictionary, Lang };
 
 type I18nContextValue = {

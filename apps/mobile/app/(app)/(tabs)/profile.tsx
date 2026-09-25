@@ -11,27 +11,38 @@ import {
   type RevenueMode,
   type SubscriptionPlan,
 } from "@direct/shared";
-import { profilePhotoUrl } from "@direct/core";
+import {
+  PAY_MODE_UNDO_WINDOW_MS,
+  driverCommissionTotals,
+  driverCompanyPayMode,
+  payModeSwitchBlock,
+  payModeUndoMsLeft,
+  profilePhotoUrl,
+  type Driver,
+} from "@direct/core";
 
 import { AppControls } from "@/components/app-controls";
 import { AppHeader } from "@/components/app-header";
 import { LocationField, LocationPicker, type PickedLocation } from "@/components/map/location-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SubscriptionCountdown } from "@/components/subscription-countdown";
 import { Card, ListCard, ListRow, Section } from "@/components/ui/card";
-import { Field, OptionGroup } from "@/components/ui/field";
-import { Row, Stack } from "@/components/ui/layout";
+import { Field, OptionGroup, SegmentedControl } from "@/components/ui/field";
+import { Divider, Row, Stack } from "@/components/ui/layout";
 import { Screen } from "@/components/ui/screen";
+import { Sheet } from "@/components/ui/sheet";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/lib/auth-context";
-import { fmt, useI18n } from "@/lib/i18n";
+import { useLocationInput } from "@/hooks/use-location-input";
+import { fmt, useI18n, type Dictionary } from "@/lib/i18n";
 import { useStore } from "@/lib/store-context";
 import { useTheme } from "@/theme/theme-context";
 import { radius } from "@/theme/tokens";
 
 export default function Profile() {
-  const { dict, lang } = useI18n();
+  const { dict } = useI18n();
   const { colors } = useTheme();
   const { user, driver, effectiveRole } = useAuth();
   const {
@@ -48,6 +59,15 @@ export default function Profile() {
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [shopPickerOpen, setShopPickerOpen] = useState(false);
+  // Seeded from the saved shop so the field shows what is on file, and a typed
+  // change only takes effect when the person saves it.
+  const shopInput = useLocationInput({
+    text: user?.business_address ?? "",
+    point:
+      user?.business_lat != null && user?.business_lng != null
+        ? { lat: user.business_lat, lng: user.business_lng }
+        : null,
+  });
 
   if (!user) return null;
 
@@ -78,7 +98,7 @@ export default function Profile() {
 
   return (
     <>
-      <AppHeader title={dict.nav.profile} />
+      <AppHeader title={dict.nav.profile} back />
       <Screen footer={<Button title={dict.common.save} size="lg" onPress={save} />}>
         <Card>
           <Row gap="md">
@@ -147,10 +167,25 @@ export default function Profile() {
             <Stack gap="md">
               <LocationField
                 label={dict.auth.shopLocation}
-                value={user.business_address}
+                value={shopInput.text}
                 placeholder={dict.auth.pinRequired}
-                onPress={() => setShopPickerOpen(true)}
+                note={shopInput.note}
+                notePlaceholder={dict.client.locationNotePlaceholder}
+                hint={dict.client.locationTypeHint}
+                resolving={shopInput.resolving}
+                onChangeText={shopInput.setText}
+                onChangeNote={shopInput.setNote}
+                onPressMap={() => setShopPickerOpen(true)}
               />
+              {shopInput.point && shopInput.label !== user.business_address ? (
+                <Button
+                  title={dict.common.save}
+                  variant="outline"
+                  size="sm"
+                  full
+                  onPress={() => saveShop({ ...shopInput.point!, label: shopInput.label })}
+                />
+              ) : null}
               <Card>
                 <Stack gap="sm">
                   <Text variant="label" weight="semibold" color="mutedForeground">
@@ -181,67 +216,7 @@ export default function Profile() {
           </Section>
         ) : null}
 
-        {isDriver && driver ? (
-          <>
-            <Section title={dict.profile.companyPayTitle} subtitle={dict.profile.companyPayHint}>
-              <OptionGroup<RevenueMode>
-                value={driver.revenue_mode}
-                onChange={(mode) => {
-                  const error = setDriverRevenueMode(driver.id, mode);
-                  if (error) toast.error(error);
-                  else toast.success(dict.profile.payPlanSaved);
-                }}
-                options={[
-                  {
-                    value: "subscription",
-                    label: dict.profile.payPlanSubscription,
-                    hint: fmt(dict.profile.payPlanSubscriptionDesc, {
-                      daily: formatDeliveryCash(state.settings.subscription_daily_price_usd),
-                      monthly: formatDeliveryCash(state.settings.subscription_price_usd),
-                    }),
-                  },
-                  {
-                    value: "percentage",
-                    label: dict.profile.payPlanPercentage,
-                    hint: fmt(dict.profile.payPlanPercentageDesc, {
-                      pct: state.settings.company_percentage,
-                    }),
-                  },
-                ]}
-              />
-            </Section>
-
-            {driver.revenue_mode === "subscription" ? (
-              <Section title={dict.driver.subscriptionPlan}>
-                <Stack gap="sm">
-                  <OptionGroup<SubscriptionPlan>
-                    value={driver.subscription_plan}
-                    onChange={(plan) => {
-                      const error = setDriverSubscriptionPlan(driver.id, plan);
-                      if (error) toast.error(error);
-                      else toast.success(dict.driver.planSaved);
-                    }}
-                    options={SUBSCRIPTION_PLANS.map((plan) => ({
-                      value: plan,
-                      label: plan === "daily" ? dict.driver.planDaily : dict.driver.planMonthly,
-                      hint: fmt(
-                        plan === "daily"
-                          ? dict.driver.planDailyDesc
-                          : dict.driver.planMonthlyDesc,
-                        { price: formatDeliveryCash(subscriptionPriceUsd(plan, state.settings)) },
-                      ),
-                    }))}
-                  />
-                  <Text variant="caption" color="mutedForeground">
-                    {driver.subscription_plan === "daily"
-                      ? dict.driver.planDailyNote
-                      : fmt(dict.driver.planMonthlyNote, { days: state.settings.grace_days })}
-                  </Text>
-                </Stack>
-              </Section>
-            ) : null}
-          </>
-        ) : null}
+        {isDriver && driver ? <PayDirectSection driver={driver} /> : null}
 
         <Section title={dict.profile.legalDocuments}>
           <ListCard>
@@ -289,7 +264,10 @@ export default function Profile() {
       <LocationPicker
         open={shopPickerOpen}
         onClose={() => setShopPickerOpen(false)}
-        onPick={saveShop}
+        onPick={(picked) => {
+          shopInput.applyPin(picked);
+          saveShop(picked);
+        }}
         title={dict.auth.shopLocation}
         initial={
           user.business_lat != null && user.business_lng != null
@@ -300,3 +278,260 @@ export default function Profile() {
     </>
   );
 }
+
+/**
+ * Everything a driver pays Direct, in one block.
+ *
+ * It used to be two sibling Sections — "Pay Direct" and "Subscription plan" —
+ * each a stack of identical bordered radio boxes. Read top to bottom that is
+ * four equal-looking choices with no hierarchy, when really there is one
+ * decision (how you pay) and, only if the answer is "subscription", a detail
+ * under it (which plan). So the plan now sits inside a card belonging to the
+ * mode above it, and drops to a segmented control: two short labels do not
+ * deserve the same weight as the decision that reveals them.
+ *
+ * The block also answers the questions the old one left out — what state the
+ * subscription is in, when it ends, what is owed on percentage — because a
+ * driver opening this screen is almost always asking one of those, not
+ * changing plans.
+ */
+function PayDirectSection({ driver }: { driver: Driver }) {
+  const { dict } = useI18n();
+  const { state, setDriverRevenueMode, setDriverSubscriptionPlan } = useStore();
+  const toast = useToast();
+
+  // The resolved mode, not the raw column: `driverCompanyPayMode` falls back to
+  // the company default when a driver has none of their own, and the web reads
+  // it the same way. Showing the raw field here would leave the group with
+  // nothing selected for such a driver.
+  const mode = driverCompanyPayMode(driver, state.settings);
+  const blocked = payModeSwitchBlock(state, driver);
+  const commission = driverCommissionTotals(state, driver.id);
+  /** The mode the confirm sheet is asking about, if it is open. */
+  const [pendingMode, setPendingMode] = useState<RevenueMode | null>(null);
+  const undoMsLeft = payModeUndoMsLeft(driver);
+
+  const lockNote =
+    blocked === "commission_due"
+      ? fmt(dict.profile.payPlanLockedCommission, {
+          amount: formatDeliveryCash(commission.dueNow),
+        })
+      : blocked === "subscription_frozen"
+        ? dict.profile.payPlanLockedFrozen
+        : null;
+
+  // Grace belongs to the monthly plan alone, so moving to daily while inside it
+  // freezes the account on the next pass. Better said before the tap.
+  const dailyWouldFreeze =
+    driver.subscription_status === "grace" && driver.subscription_plan === "monthly";
+
+  return (
+    <Section title={dict.profile.companyPayTitle} subtitle={dict.profile.companyPayHint}>
+      <Stack gap="sm">
+        <OptionGroup<RevenueMode>
+          value={mode}
+          disabled={blocked !== null}
+          // Ask first. Changing how you get paid is not a thing to do by
+          // brushing a radio button, and the window that makes it reversible
+          // is only reassuring if you are told about it beforehand.
+          onChange={setPendingMode}
+          options={[
+            {
+              value: "subscription",
+              label: dict.profile.payPlanSubscription,
+              hint: fmt(dict.profile.payPlanSubscriptionDesc, {
+                daily: formatDeliveryCash(state.settings.subscription_daily_price_usd),
+                monthly: formatDeliveryCash(state.settings.subscription_price_usd),
+              }),
+            },
+            {
+              value: "percentage",
+              label: dict.profile.payPlanPercentage,
+              hint: fmt(dict.profile.payPlanPercentageDesc, {
+                pct: state.settings.company_percentage,
+              }),
+            },
+          ]}
+        />
+
+        {lockNote ? (
+          <Text variant="caption" color="warning">
+            {lockNote}
+          </Text>
+        ) : null}
+
+        {/* While the window is open, say so — it is the difference between
+            "I have broken something" and "I can undo this". */}
+        {undoMsLeft > 0 ? (
+          <Text variant="caption" color="mutedForeground">
+            {fmt(dict.profile.payPlanUndoLeft, {
+              minutes: Math.max(1, Math.ceil(undoMsLeft / 60_000)),
+            })}
+          </Text>
+        ) : null}
+
+        {mode === "subscription" ? (
+          <Card>
+            <Stack gap="md">
+              <Row justify="space-between" gap="sm">
+                <Text variant="callout" weight="semibold" style={{ flex: 1 }}>
+                  {dict.driver.subscriptionPlan}
+                </Text>
+                <Badge
+                  label={SUB_STATUS_LABEL(dict)[driver.subscription_status]}
+                  tone={
+                    driver.subscription_status === "active"
+                      ? "success"
+                      : driver.subscription_status === "grace"
+                        ? "warning"
+                        : "destructive"
+                  }
+                />
+              </Row>
+
+              <SegmentedControl<SubscriptionPlan>
+                value={driver.subscription_plan}
+                onChange={(plan) => {
+                  if (plan === driver.subscription_plan) return;
+                  const error = setDriverSubscriptionPlan(driver.id, plan);
+                  if (error) toast.error(error);
+                  else toast.success(dict.driver.planSaved);
+                }}
+                options={SUBSCRIPTION_PLANS.map((plan) => ({
+                  value: plan,
+                  label: plan === "daily" ? dict.driver.planDaily : dict.driver.planMonthly,
+                }))}
+              />
+
+              <Row justify="space-between" gap="sm">
+                <Text variant="caption" color="mutedForeground" style={{ flex: 1 }}>
+                  {fmt(
+                    driver.subscription_plan === "daily"
+                      ? dict.driver.planDailyDesc
+                      : dict.driver.planMonthlyDesc,
+                    {
+                      price: formatDeliveryCash(
+                        subscriptionPriceUsd(driver.subscription_plan, state.settings),
+                      ),
+                    },
+                  )}
+                </Text>
+                <Row gap="xs">
+                  <Text variant="caption" color="mutedForeground">
+                    {dict.driver.ends}
+                  </Text>
+                  <SubscriptionCountdown
+                    endsAt={driver.subscription_ends_at}
+                    fallback={dict.driver.notStarted}
+                    variant="caption"
+                  />
+                </Row>
+              </Row>
+
+              <Text variant="caption" color="mutedForeground">
+                {driver.subscription_plan === "daily"
+                  ? dict.driver.planDailyNote
+                  : fmt(dict.driver.planMonthlyNote, { days: state.settings.grace_days })}
+              </Text>
+
+              {dailyWouldFreeze ? (
+                <Text variant="caption" color="warning">
+                  {dict.driver.planDailyEndsGrace}
+                </Text>
+              ) : null}
+            </Stack>
+          </Card>
+        ) : (
+          <Card>
+            <Stack gap="sm">
+              <Row justify="space-between" gap="sm">
+                <Text variant="callout" weight="semibold" style={{ flex: 1 }}>
+                  {dict.profile.payPlanPercentage}
+                </Text>
+                <Text variant="callout" weight="bold" numeric>
+                  {state.settings.company_percentage}%
+                </Text>
+              </Row>
+              <Divider />
+              <Row justify="space-between" gap="sm">
+                <Text variant="caption" color="mutedForeground" style={{ flex: 1 }}>
+                  {dict.driver.dueNow}
+                </Text>
+                <Text
+                  variant="callout"
+                  weight="semibold"
+                  numeric
+                  color={commission.dueNow > 0 ? "destructive" : "success"}
+                >
+                  {formatDeliveryCash(commission.dueNow)}
+                </Text>
+              </Row>
+              <Row justify="space-between" gap="sm">
+                <Stack gap={2} flex={1}>
+                  <Text variant="caption" color="mutedForeground">
+                    {dict.driver.accruingToday}
+                  </Text>
+                  <Text variant="caption" color="mutedForeground">
+                    {dict.driver.accruingTodayHint}
+                  </Text>
+                </Stack>
+                <Text variant="callout" weight="semibold" numeric>
+                  {formatDeliveryCash(commission.accruingToday)}
+                </Text>
+              </Row>
+            </Stack>
+          </Card>
+        )}
+      </Stack>
+
+      <Sheet
+        open={pendingMode !== null}
+        onClose={() => setPendingMode(null)}
+        title={dict.profile.payPlanConfirmTitle}
+        subtitle={
+          pendingMode === "percentage"
+            ? fmt(dict.profile.payPlanConfirmToPercentage, {
+                pct: state.settings.company_percentage,
+              })
+            : dict.profile.payPlanConfirmToSubscription
+        }
+        footer={
+          <Stack gap="sm">
+            <Button
+              title={dict.profile.payPlanConfirmAction}
+              size="lg"
+              onPress={() => {
+                if (!pendingMode) return;
+                const error = setDriverRevenueMode(driver.id, pendingMode);
+                setPendingMode(null);
+                if (error) toast.error(error);
+                else toast.success(dict.profile.payPlanSaved);
+              }}
+            />
+            <Button
+              title={dict.common.cancel}
+              variant="ghost"
+              size="md"
+              full
+              onPress={() => setPendingMode(null)}
+            />
+          </Stack>
+        }
+      >
+        <Text variant="callout" color="mutedForeground">
+          {fmt(dict.profile.payPlanUndoWindow, {
+            minutes: Math.round(PAY_MODE_UNDO_WINDOW_MS / 60_000),
+          })}
+        </Text>
+      </Sheet>
+    </Section>
+  );
+}
+
+/** The four subscription states, in the active language. */
+const SUB_STATUS_LABEL = (dict: Dictionary): Record<Driver["subscription_status"], string> => ({
+  active: dict.driver.subStatusActive,
+  grace: dict.driver.subStatusGrace,
+  frozen: dict.driver.subStatusFrozen,
+  pending_payment: dict.driver.subStatusPending,
+});

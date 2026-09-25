@@ -3,7 +3,17 @@ import { WHISH_MAX_AMOUNT_USD, isWhishCollectPaid } from "@direct/shared";
 import type { WhishKind } from "@direct/core";
 
 /**
- * Mobile side of the Whish Pay contract.
+ * Mobile side of the Whish Pay *merchant collect* contract.
+ *
+ * PARKED. No screen imports this today: the company holds no Whish
+ * channel/secret, so `/api/whish/create` answers `{configured: false}` and the
+ * collect flow could never complete. The driver pay sheet opens the Whish app
+ * for a Whish -> Whish transfer instead (`whish-transfer.ts`), which an admin
+ * confirms by hand.
+ *
+ * Kept rather than deleted because this is the only *verifiable* path: the
+ * moment merchant credentials exist, wiring `use-whish-collect.ts` back into
+ * `DriverPaySheet` restores success-only unlocking with no new code.
  *
  * The channel and secret live on the web deployment and never ship in this
  * bundle, so every call goes through the existing `/api/whish/*` routes -- the

@@ -2,17 +2,18 @@ import React, { useMemo, useState } from "react";
 import { Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Bike, Building2, User } from "lucide-react-native";
-import type { DriverType, UserRole } from "@direct/shared";
+import type { UserRole } from "@direct/shared";
 
 import { LocationField, LocationPicker, type PickedLocation } from "@/components/map/location-picker";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Field, OptionGroup } from "@/components/ui/field";
+import { Field } from "@/components/ui/field";
 import { Row, Stack } from "@/components/ui/layout";
 import { Screen } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { fmt, useI18n } from "@/lib/i18n";
+import { useLocationInput } from "@/hooks/use-location-input";
 import { useStore } from "@/lib/store-context";
 import { useTheme } from "@/theme/theme-context";
 import { radius, space } from "@/theme/tokens";
@@ -38,9 +39,11 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [businessName, setBusinessName] = useState("");
-  const [shop, setShop] = useState<PickedLocation | null>(null);
+  const shopInput = useLocationInput();
+  const shop: PickedLocation | null = shopInput.point
+    ? { ...shopInput.point, label: shopInput.label }
+    : null;
   const [shopPickerOpen, setShopPickerOpen] = useState(false);
-  const [driverType, setDriverType] = useState<DriverType>("fast");
   const [submitting, setSubmitting] = useState(false);
 
   const passwordMismatch = confirm.length > 0 && confirm !== password;
@@ -66,7 +69,12 @@ export default function Register() {
       shop_address: role === "business" ? shop?.label : undefined,
       shop_lat: role === "business" ? shop?.lat : undefined,
       shop_lng: role === "business" ? shop?.lng : undefined,
-      driver_type: role === "driver" ? driverType : undefined,
+      // Driver roles are not a thing the company runs yet, so signing up does
+      // not ask. `createUser` defaults to "fast"; the type stays in the domain
+      // model (dispatch and pricing both read it) and an admin can change it —
+      // asking a new driver to self-select a tier they cannot be held to was
+      // only ever collecting an answer nobody acted on.
+      driver_type: undefined,
     });
     setSubmitting(false);
     if (error) {
@@ -196,37 +204,23 @@ export default function Register() {
             />
             <LocationField
               label={dict.auth.shopLocation}
-              value={shop?.label}
+              value={shopInput.text}
               placeholder={dict.auth.pinRequired}
-              onPress={() => setShopPickerOpen(true)}
+              note={shopInput.note}
+              notePlaceholder={dict.client.locationNotePlaceholder}
+              hint={dict.client.locationTypeHint}
+              resolving={shopInput.resolving}
+              onChangeText={shopInput.setText}
+              onChangeNote={shopInput.setNote}
+              onPressMap={() => setShopPickerOpen(true)}
             />
+            {shopInput.text.trim().length >= 3 && !shopInput.resolving && !shopInput.point ? (
+              <Text variant="caption" color="warning">
+                {dict.client.locationNotFound}
+              </Text>
+            ) : null}
             <Text variant="caption" color="mutedForeground">
               {dict.auth.shopLocationHint}
-            </Text>
-          </>
-        ) : null}
-
-        {role === "driver" ? (
-          <>
-            <OptionGroup<DriverType>
-              label={dict.auth.driverType}
-              value={driverType}
-              onChange={setDriverType}
-              options={[
-                {
-                  value: "fast",
-                  label: dict.auth.driverTypeFast,
-                  hint: dict.auth.driverTypeFastDesc,
-                },
-                {
-                  value: "long_distance",
-                  label: dict.auth.driverTypeLong,
-                  hint: dict.auth.driverTypeLongDesc,
-                },
-              ]}
-            />
-            <Text variant="caption" color="mutedForeground">
-              {dict.auth.driverTypeHint}
             </Text>
           </>
         ) : null}
@@ -258,7 +252,7 @@ export default function Register() {
       <LocationPicker
         open={shopPickerOpen}
         onClose={() => setShopPickerOpen(false)}
-        onPick={setShop}
+        onPick={shopInput.applyPin}
         title={dict.auth.shopLocation}
         initial={shop}
       />

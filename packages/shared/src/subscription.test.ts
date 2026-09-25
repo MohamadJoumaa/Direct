@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  SUBSCRIPTION_RENEW_WINDOW_DAYS,
   formatSubscriptionRemaining,
+  isSubscriptionRenewable,
   subscriptionEndsAt,
   subscriptionGraceMs,
   subscriptionPriceUsd,
@@ -71,4 +73,31 @@ test("formatSubscriptionRemaining renders d:hh:mm, including the expired case", 
   assert.equal(formatSubscriptionRemaining(null, now), "0:00:00");
   const almostADay = now + 23 * 60 * 60 * 1000 + 59 * 60 * 1000;
   assert.equal(formatSubscriptionRemaining(almostADay, now), "0:23:59");
+});
+
+test("isSubscriptionRenewable only opens inside the renewal window", () => {
+  const now = Date.parse("2026-01-01T00:00:00.000Z");
+  const day = 24 * 60 * 60 * 1000;
+
+  assert.equal(SUBSCRIPTION_RENEW_WINDOW_DAYS, 5);
+
+  // Fresh monthly subscription: nothing to decide, so no pay action.
+  assert.equal(isSubscriptionRenewable(now + 30 * day, now), false);
+  // One minute outside the window is still outside it.
+  assert.equal(isSubscriptionRenewable(now + 5 * day + 60_000, now), false);
+  // Exactly five days is inside — the boundary belongs to the driver.
+  assert.equal(isSubscriptionRenewable(now + 5 * day, now), true);
+  assert.equal(isSubscriptionRenewable(now + 2 * day, now), true);
+
+  // Expired, frozen, and a driver who never paid all land here.
+  assert.equal(isSubscriptionRenewable(now - 1, now), true);
+  assert.equal(isSubscriptionRenewable(null, now), true);
+
+  // A daily driver is inside the window for their whole 24h, which is what
+  // keeps a one-day plan payable at any moment.
+  assert.equal(isSubscriptionRenewable(now + day, now), true);
+
+  // The window is tunable for a future admin setting.
+  assert.equal(isSubscriptionRenewable(now + 10 * day, now, 14), true);
+  assert.equal(isSubscriptionRenewable(now + 10 * day, now, 0), false);
 });

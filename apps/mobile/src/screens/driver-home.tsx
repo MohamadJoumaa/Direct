@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { View } from "react-native";
 import { AlertTriangle, Ban, Snowflake, Zap } from "lucide-react-native";
-import { formatSubscriptionRemaining } from "@direct/shared";
 import {
   availableOrdersForDriver,
   driverPayDueUsd,
@@ -12,6 +11,7 @@ import {
 
 import { AppHeader } from "@/components/app-header";
 import { DriverPaySheet } from "@/components/driver-pay-sheet";
+import { SubscriptionCountdown } from "@/components/subscription-countdown";
 import { OrderCard } from "@/components/order-card";
 import { Button } from "@/components/ui/button";
 import { Card, EmptyState, Section } from "@/components/ui/card";
@@ -285,14 +285,14 @@ function SubscriptionLine() {
       <Text variant="label" color="mutedForeground">
         {dict.driver.subscription} · {statusLabel}
       </Text>
-      <Text variant="label" weight="semibold" numeric>
-        {driver.subscription_ends_at
-          ? formatSubscriptionRemaining(
-            new Date(driver.subscription_ends_at).getTime(),
-            Date.now(),
-          )
-          : dict.driver.notStarted}
-      </Text>
+      {/* A component with its own clock: the store returns the same state
+          reference when nothing changed, so a number computed here would
+          freeze on mount and never tick. */}
+      <SubscriptionCountdown
+        endsAt={driver.subscription_ends_at}
+        fallback={dict.driver.notStarted}
+        variant="label"
+      />
     </Row>
   );
 }

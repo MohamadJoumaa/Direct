@@ -30,6 +30,14 @@ export function dirForLang(lang: Lang): "ltr" | "rtl" {
 
 export { fmt } from "./format";
 
+export {
+  formatDate,
+  formatDateTime,
+  formatTime,
+  formatDayMonth,
+  type DateLike,
+} from "./date-format";
+
 export function orderStatusLabel(status: OrderStatus | string, dict: Dictionary): string {
   return dict.orderStatus[status as OrderStatus] ?? status.replaceAll("_", " ");
 }

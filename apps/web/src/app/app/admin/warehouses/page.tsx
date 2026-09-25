@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
 import { formatOrderNumber } from "@/lib/demo-store";
 import { useStore } from "@/lib/store-context";
-import { useI18n } from "@/lib/i18n";
+import { formatDate, useI18n } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
 
 type SelectedPlace = { address: string; lat: number; lng: number };
@@ -297,7 +297,7 @@ function WarehousesContent() {
                                 <User className="size-3" />
                                 {dict.admin.deliveredBy} {p.delivered_by_name}
                                 {p.delivered_at
-                                  ? ` ${dict.admin.deliveredOn} ${new Date(p.delivered_at).toLocaleDateString()}`
+                                  ? ` ${dict.admin.deliveredOn} ${formatDate(p.delivered_at)}`
                                   : ""}
                               </Badge>
                             ) : null}

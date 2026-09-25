@@ -1,6 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { View } from "react-native";
-import { formatDeliveryCash, formatSubscriptionRemaining } from "@direct/shared";
+import {
+  SUBSCRIPTION_RENEW_WINDOW_DAYS,
+  formatDeliveryCash,
+  isSubscriptionRenewable,
+} from "@direct/shared";
 import {
   driverCommissionTotals,
   driverDailyProfit,
@@ -10,6 +14,7 @@ import {
 
 import { AppHeader } from "@/components/app-header";
 import { DriverPaySheet } from "@/components/driver-pay-sheet";
+import { SubscriptionCountdown } from "@/components/subscription-countdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, EmptyState, Section, Stat } from "@/components/ui/card";
@@ -18,7 +23,7 @@ import { Divider, Row, Stack } from "@/components/ui/layout";
 import { Screen } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
 import { useAuth } from "@/lib/auth-context";
-import { useI18n } from "@/lib/i18n";
+import { fmt, useI18n } from "@/lib/i18n";
 import { useStore } from "@/lib/store-context";
 import { useTheme } from "@/theme/theme-context";
 import { radius, space } from "@/theme/tokens";
@@ -59,6 +64,19 @@ export default function Earnings() {
 
   const due = driverPayDueUsd(state, driver);
   const isPercentage = driver.revenue_mode === "percentage";
+  const endsAtMs = driver.subscription_ends_at
+    ? new Date(driver.subscription_ends_at).getTime()
+    : null;
+  // Commission is money already owed and must always be payable. A
+  // subscription is not: renewing is additive, so a driver with weeks left
+  // gains nothing from paying now and loses $20 to a mis-tap.
+  //
+  // Keyed off `due.kind`, not `isPercentage`: `driverPayDueUsd` resolves the
+  // mode through `driverCompanyPayMode`, which falls back to company settings
+  // when the driver has no `revenue_mode` of their own. Reading the raw field
+  // here would hide a real commission behind a subscription countdown.
+  const renewOpen =
+    due.kind === "commission" || isSubscriptionRenewable(endsAtMs, Date.now());
 
   return (
     <>
@@ -154,25 +172,29 @@ export default function Earnings() {
                     <Text variant="callout" color="mutedForeground">
                       {dict.driver.ends}
                     </Text>
-                    <Text variant="callout" weight="semibold" numeric>
-                      {driver.subscription_ends_at
-                        ? formatSubscriptionRemaining(
-                            new Date(driver.subscription_ends_at).getTime(),
-                            Date.now(),
-                          )
-                        : dict.driver.notStarted}
-                    </Text>
+                    <SubscriptionCountdown
+                      endsAt={driver.subscription_ends_at}
+                      fallback={dict.driver.notStarted}
+                    />
                   </Row>
                 </>
               )}
 
-              {due.amount > 0 ? (
+              {due.amount > 0 && renewOpen ? (
                 <Button
                   title={dict.driver.payWithWhish}
                   size="md"
                   full
                   onPress={() => setPayOpen(true)}
                 />
+              ) : null}
+
+              {due.amount > 0 && !renewOpen ? (
+                <Text variant="caption" color="mutedForeground">
+                  {fmt(dict.driver.renewWindowHint, {
+                    days: SUBSCRIPTION_RENEW_WINDOW_DAYS,
+                  })}
+                </Text>
               ) : null}
             </Stack>
           </Card>

@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
 import { Briefcase, Package, Truck } from "lucide-react";
-import { type DriverType, type UserRole } from "@direct/shared";
+import { type UserRole } from "@direct/shared";
 import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { mapsConfigured } from "@/components/maps-config";
@@ -35,7 +35,6 @@ const inputClass =
 
 /** The only two types a new driver can honestly pick for themselves: trusted is
  *  earned through document review, and the rest belong to the Direct team. */
-const SIGNUP_DRIVER_TYPES = ["fast", "long_distance"] as const;
 
 /**
  * What sits behind the sign-up popups, so closing one leaves the work Direct
@@ -178,7 +177,6 @@ function RegisterForm() {
   const [businessName, setBusinessName] = useState("");
   const [shopAddress, setShopAddress] = useState("");
   const [shopPin, setShopPin] = useState<{ lat: number; lng: number } | null>(null);
-  const [driverType, setDriverType] = useState<DriverType>("fast");
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -214,7 +212,10 @@ function RegisterForm() {
     }
 
     const err = register(
-      role === "driver" ? { ...shared, driver_type: driverType } : shared,
+      // No driver roles yet, so registration does not ask; `createUser`
+      // defaults to "fast". Same decision as the Expo app — the type stays in
+      // the domain model for dispatch and pricing, and an admin sets it.
+      shared,
     );
     if (err) {
       toast.error(err);
@@ -387,44 +388,6 @@ function RegisterForm() {
                   onPinChange={setShopPin}
                 />
               </>
-            ) : null}
-
-            {role === "driver" ? (
-              <div className="flex flex-col gap-2">
-                <Label className="text-sm font-medium">{dict.auth.driverType}</Label>
-                <div
-                  role="radiogroup"
-                  aria-label={dict.auth.driverType}
-                  className="flex flex-col gap-2"
-                >
-                  {SIGNUP_DRIVER_TYPES.map((value) => {
-                    const selected = driverType === value;
-                    const title =
-                      value === "fast" ? dict.auth.driverTypeFast : dict.auth.driverTypeLong;
-                    const desc =
-                      value === "fast"
-                        ? dict.auth.driverTypeFastDesc
-                        : dict.auth.driverTypeLongDesc;
-                    return (
-                      <button
-                        key={value}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        onClick={() => setDriverType(value)}
-                        className={cn(
-                          "touch-target flex min-h-11 flex-col items-start gap-0.5 rounded-xl border-2 p-3 text-start transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                          selected ? "border-primary bg-muted" : "border-border",
-                        )}
-                      >
-                        <span className="text-base font-semibold">{title}</span>
-                        <span className="text-sm text-muted-foreground">{desc}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-sm text-muted-foreground">{dict.auth.driverTypeHint}</p>
-              </div>
             ) : null}
 
             <div className="flex flex-col gap-2">

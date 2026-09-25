@@ -36,8 +36,9 @@ export type RowProps = StackProps & { wrap?: boolean };
 /**
  * Horizontal row.
  *
- * Plain `flexDirection: "row"` is correct here: React Native mirrors it once
- * `I18nManager.forceRTL` is on, which `@/lib/i18n` handles at the app level.
+ * Plain `flexDirection: "row"` is correct here: Yoga lays a row out start → end,
+ * and `DirectionRoot` in `@/lib/i18n` sets the tree's `direction` from the
+ * active language, so this mirrors without the component knowing anything.
  * Writing `row-reverse` by hand would double-flip in Arabic.
  */
 export function Row({ gap, align = "center", justify, flex, wrap, style, ...rest }: RowProps) {

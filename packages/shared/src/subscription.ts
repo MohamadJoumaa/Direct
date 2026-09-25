@@ -58,6 +58,37 @@ export function subscriptionRemaining(
   return { expired: false, days, hours, minutes, totalMs };
 }
 
+/**
+ * How close to expiry a subscription has to be before renewing is offered.
+ *
+ * Renewal is additive -- `subscriptionEndsAt` extends from
+ * `max(now, currentEndsAt)` -- so paying early never loses time. The window is
+ * not about protecting the driver's balance, it is about the screen: a driver
+ * with three weeks left has nothing to decide, and a pay button sitting there
+ * is one mis-tap away from charging them for time they already own.
+ */
+export const SUBSCRIPTION_RENEW_WINDOW_DAYS = 5;
+
+/**
+ * Whether the renew / "Pay with Whish" action should be offered at all.
+ *
+ * True once the subscription is inside the window, and always true once it has
+ * expired (`frozen` and `pending_payment` both land here, since neither has
+ * time left to protect).
+ *
+ * Percentage-mode drivers never come through this gate -- theirs is `dueNow`,
+ * which is money already owed and must always be payable.
+ */
+export function isSubscriptionRenewable(
+  endsAtMs: number | null,
+  nowMs: number,
+  windowDays: number = SUBSCRIPTION_RENEW_WINDOW_DAYS,
+): boolean {
+  const remaining = subscriptionRemaining(endsAtMs, nowMs);
+  if (remaining.expired) return true;
+  return remaining.totalMs <= Math.max(0, windowDays) * 24 * 60 * 60 * 1000;
+}
+
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }

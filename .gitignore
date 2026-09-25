@@ -13,3 +13,7 @@ coverage
 .vercel
 supabase/.branches
 supabase/.temp
+
+# Personal / local-only
+.claude/settings.local.json
+Claude outputs/

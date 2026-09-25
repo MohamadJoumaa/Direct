@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Bell, ChevronDown, Eye } from "lucide-react-native";
+import { ArrowLeft, ArrowRight, Bell, ChevronDown, Eye } from "lucide-react-native";
 import { USER_ROLES, type UserRole } from "@direct/shared";
 import type { Dictionary } from "@direct/i18n";
 
@@ -27,13 +27,23 @@ export function AppHeader({
   title,
   subtitle,
   action,
+  back,
 }: {
   title: string;
   subtitle?: string;
   action?: React.ReactNode;
+  /**
+   * Show a back arrow.
+   *
+   * Tab screens draw their own header, so they get no navigator back button —
+   * which is fine for a tab reached from the bar, and wrong for one reached
+   * from somewhere else. Profile is the case that bit: you arrive from a link
+   * and the only way out is to hunt for a tab.
+   */
+  back?: boolean;
 }) {
   const { colors } = useTheme();
-  const { dict } = useI18n();
+  const { dict, dir } = useI18n();
   const { user, isAdmin } = useAuth();
   const { state } = useStore();
   const insets = useSafeAreaInsets();
@@ -54,6 +64,21 @@ export function AppHeader({
       }}
     >
       <Row gap="sm" align="flex-start">
+        {back ? (
+          <IconButton
+            accessibilityLabel={dict.common.back}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/home"))}
+          >
+            {/* The row mirrors itself in RTL, but an icon is a picture and does
+                not — "back" points towards the start of the line, which is the
+                right-hand side in Arabic. */}
+            {dir === "rtl" ? (
+              <ArrowRight size={22} color={colors.foreground} />
+            ) : (
+              <ArrowLeft size={22} color={colors.foreground} />
+            )}
+          </IconButton>
+        ) : null}
         <Stack gap={2} flex={1}>
           <Text variant="title" weight="extrabold" numberOfLines={1}>
             {title}

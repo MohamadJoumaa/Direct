@@ -2,7 +2,6 @@
 import "@/lib/polyfills";
 
 import React, { useCallback, useEffect } from "react";
-import { View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -24,7 +23,7 @@ import {
 } from "@expo-google-fonts/ibm-plex-sans-arabic";
 
 import { AuthProvider } from "@/lib/auth-context";
-import { I18nProvider, useI18n } from "@/lib/i18n";
+import { DirectionRoot, I18nProvider, useI18n } from "@/lib/i18n";
 import { StoreProvider } from "@/lib/store-context";
 import { ToastProvider } from "@/components/ui/toast";
 import { ThemeProvider, useTheme } from "@/theme/theme-context";
@@ -87,7 +86,10 @@ function AppFrame({ onReady }: { onReady: () => void }) {
   }, [langReady, onReady]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }} onLayout={onReady}>
+    // DirectionRoot, not a plain View: the whole navigator has to flip when the
+    // language changes, and it has to flip in this render rather than after a
+    // relaunch that Expo Go cannot perform.
+    <DirectionRoot style={{ backgroundColor: colors.background }} onLayout={onReady}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       <Stack
         screenOptions={{
@@ -104,6 +106,6 @@ function AppFrame({ onReady }: { onReady: () => void }) {
         <Stack.Screen name="register" options={{ title: dict.auth.createYourAccount }} />
         <Stack.Screen name="(app)" options={{ headerShown: false }} />
       </Stack>
-    </View>
+    </DirectionRoot>
   );
 }

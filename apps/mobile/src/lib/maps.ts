@@ -1,19 +1,46 @@
 import { Platform } from "react-native";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import type { LatLng } from "@direct/shared";
 
 /** Beirut. The same fallback centre the website uses when nothing is known. */
 export const BEIRUT: LatLng = { lat: 33.8938, lng: 35.5018 };
 
 /**
- * Whether a real map can be rendered.
+ * True while the JS is running inside the Expo Go sandbox rather than a build
+ * of our own.
  *
- * iOS falls back to Apple Maps, which needs no key of ours, so a map is always
- * available there. Android's `react-native-maps` is Google-only and renders a
- * blank grey tile without a key -- worse than showing nothing -- so the app
- * drops to the offline panel instead, mirroring `useMapsAvailable()` on the web.
+ * `appOwnership` is the historical signal and `executionEnvironment` the
+ * current one; SDK versions disagree about which is populated, so both are
+ * consulted and either one is enough.
+ */
+export function isExpoGo(): boolean {
+  return (
+    Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+    Constants.appOwnership === "expo"
+  );
+}
+
+/**
+ * Whether **Google/Apple** maps can be rendered here.
+ *
+ *  - iOS uses Apple Maps, which needs no key of ours. Always true.
+ *  - **Android in Expo Go: false, always.** An earlier version of this returned
+ *    true, on Expo's documented claim that Expo Go needs no setup for
+ *    react-native-maps. On SDK 57 that is not what happens: Expo Go ships no
+ *    usable Google Maps key, and `PROVIDER_GOOGLE` renders a solid black
+ *    rectangle with the controls drawn on top of it. Our own key cannot help —
+ *    it is native config, and native config only reaches a binary we built.
+ *    Returning true here turned a readable fallback into a black screen.
+ *  - A dev-client or store build on Android needs our key; without it the map
+ *    is blank, which is worse than not drawing one.
+ *
+ * False does not mean "no map": `OpenStreetMapPicker` needs no key on any
+ * platform and is what the location picker falls back to. This function only
+ * answers for the native map.
  */
 export function mapsAvailable(): boolean {
   if (Platform.OS === "ios") return true;
+  if (Platform.OS === "android" && isExpoGo()) return false;
   return (process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? "").length > 0;
 }
 

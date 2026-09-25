@@ -192,11 +192,6 @@ export const en = {
       "Your shop is the default pickup for every order. You can change it per order later.",
     pinRequired: "Pin your shop on the map",
     driverType: "Driver type",
-    driverTypeHint: "You can ask an admin to change this later.",
-    driverTypeFast: "Fast driver",
-    driverTypeFastDesc: "Short trips around town.",
-    driverTypeLong: "Long distance driver",
-    driverTypeLongDesc: "Between cities and far areas.",
     startSignUp: "Start",
     resumeSignUp: "Continue sign-up",
     signUpIntro: "Two quick steps: pick your role, then fill in what it needs.",
@@ -281,6 +276,10 @@ export const en = {
     followHint: "Follow your driver live after they accept your order",
     trackingHint: "Your driver is on the map — follow them to the next stop",
     mapsMissingKey: "Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to show Google Maps. Markers below still list pickup, drop-off, and drivers.",
+    locationTypeHint:
+      "Type a shop, building or landmark near the spot, then add the detail that gets the driver to the door. Tap the pin for the map.",
+    locationNotePlaceholder: "Exact spot — floor, gate, colour of the building…",
+    locationNotFound: "We could not find that place. Try a nearby landmark, or tap the pin to set it on the map.",
     mapsMissingKeyMobile:
       "Add EXPO_PUBLIC_GOOGLE_MAPS_API_KEY to show the map. The points below still list pickup, drop-off, and drivers.",
     mapsAuthFailed:
@@ -329,6 +328,31 @@ export const en = {
     couldNotCheckPayment: "Could not check the payment right now",
     whishSupportNumber:
       "Direct Whish {number} is for support. Payment is verified through Whish Pay, not by sending to this number.",
+    /* Expo pays Direct with a Whish -> Whish transfer. No API can verify a P2P
+       transfer, so every string below ends at an admin confirming it. */
+    renewWindowHint: "Renewal opens in the last {days} days before your subscription ends.",
+    whishSendTo: "Send to",
+    whishTransferHow:
+      "Open Whish, choose Send money → Whish to Whish, paste {number}, and send {amount}.",
+    whishOpenApp: "Open Whish app",
+    whishOpenAgain: "Open Whish again",
+    whishOpenedWeb: "Opened Whish. If the app did not take over, send it from Whish yourself.",
+    whishNoApp: "Don't have Whish?",
+    /* Said while an admin has not yet confirmed the transfer. */
+    whishAwaitingTitle: "Waiting for confirmation",
+    whishAwaitingHint: "This may take a few minutes.",
+    whishOpenFailed:
+      "Could not open Whish. Send {amount} to {number} from the Whish app, then confirm here.",
+    whishNotFound:
+      "We could not find Whish on this phone. Send {amount} to {number} from Whish, then confirm here.",
+    whishConfirmSent: "I sent it — confirm",
+    whishConfirmBody:
+      "Confirm only after the money has left your Whish account. An admin checks the transfer before your account unlocks.",
+    whishReference: "Whish reference (optional)",
+    whishReferenceHint:
+      "The transaction number Whish shows after sending. It helps the admin find your transfer.",
+    whishCopiedNumber: "Number copied",
+    whishCopiedAmount: "Amount copied",
     gracePeriod: "Grace period",
     graceRenewBody:
       "Renew soon or your account freezes after {days} days. You can pay now with Whish Pay.",
@@ -389,6 +413,9 @@ export const en = {
     planSaved: "Plan updated",
     planDailyNote: "The daily plan ends exactly 24 hours after you pay — no grace days.",
     planMonthlyNote: "The monthly plan keeps {days} grace days after it ends.",
+    autoStatusHint: "This updates on its own as you reach each stop — use the button only if it doesn't.",
+    planDailyEndsGrace:
+      "You are in your grace days. Switching to daily ends them now, because the daily plan has none.",
     subStatusActive: "Active",
     subStatusGrace: "Grace period",
     subStatusFrozen: "Frozen",
@@ -407,6 +434,12 @@ export const en = {
     docVehicle: "Vehicle registration",
     docLicense: "Driver license",
     selfieHint: "This photo is used as your profile picture.",
+    docSource: "Add document",
+    docSourceHint: "Take a new photo, or pick one you already have.",
+    takePhoto: "Take a photo",
+    chooseFromGallery: "Choose from gallery",
+    cameraDenied: "Camera access denied. Allow it in Settings, or choose from your gallery.",
+    galleryDenied: "Photo access denied. Allow it in Settings, or take a photo instead.",
     legalDocuments: "Legal documents",
     identityDocuments: "Identity documents",
     uploadDocsOptional: "Upload your documents for verification. Once all are approved, you'll receive a verified badge.",
@@ -426,6 +459,22 @@ export const en = {
     payPlanPercentage: "Percentage of each order",
     payPlanPercentageDesc: "{pct}% of each delivery goes to Direct",
     payPlanSaved: "Payment plan updated",
+    /* Changing how you pay is closed while a debt is open — see
+       `payModeSwitchBlock` in @direct/core for why. */
+    payPlanLockedCommission:
+      "Pay the {amount} you owe Direct before changing how you pay.",
+    payPlanLockedFrozen:
+      "Your subscription is frozen. Pay it before you can change how you pay.",
+    payPlanCurrent: "How you pay",
+    payPlanConfirmTitle: "Change how you pay?",
+    payPlanConfirmToSubscription:
+      "You will pay Direct a subscription instead of a share of each delivery.",
+    payPlanConfirmToPercentage:
+      "Direct will take {pct}% of every delivery instead of a subscription.",
+    payPlanUndoWindow:
+      "You have {minutes} minutes to change your mind. After that you will need to settle what you owe before switching again.",
+    payPlanUndoLeft: "You can still switch back for {minutes} more minutes.",
+    payPlanConfirmAction: "Yes, change it",
   },
   admin: {
     allOrders: "All orders",

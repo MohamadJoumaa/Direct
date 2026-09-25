@@ -123,15 +123,25 @@ export default function OrderDetail() {
 
   const primary = (() => {
     if (canDrive && advance) {
+      // The status now moves on its own as the driver reaches each stop
+      // (`applyAutoStatus`). This stays as the manual override for the cases
+      // GPS cannot cover — permission denied, a fix that never arrives, a
+      // pickup inside a building — so nobody is ever stuck behind a geofence.
       return (
-        <Button
-          title={orderStatusLabel(advance, dict)}
-          size="lg"
-          onPress={() => {
-            const error = advanceOrder(order.id, user.id, advance);
-            if (error) toast.error(error);
-          }}
-        />
+        <Stack gap="xs">
+          <Button
+            title={orderStatusLabel(advance, dict)}
+            size="lg"
+            variant="outline"
+            onPress={() => {
+              const error = advanceOrder(order.id, user.id, advance);
+              if (error) toast.error(error);
+            }}
+          />
+          <Text variant="caption" color="mutedForeground" center>
+            {dict.driver.autoStatusHint}
+          </Text>
+        </Stack>
       );
     }
     if (canDrive && order.status === "awaiting_confirmation" && !order.driver_confirmed) {

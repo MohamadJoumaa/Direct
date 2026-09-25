@@ -164,6 +164,7 @@ export function OptionGroup<T extends string>({
   value,
   onChange,
   columns,
+  disabled,
 }: {
   label?: string;
   options: Option<T>[];
@@ -171,6 +172,12 @@ export function OptionGroup<T extends string>({
   onChange: (next: T) => void;
   /** Lay the options out side by side instead of stacked. */
   columns?: boolean;
+  /**
+   * Locks the whole group. The current answer stays fully legible — this is
+   * "you cannot change this yet", not "this does not apply to you" — so only
+   * the unchosen options dim, and the caller is expected to say why nearby.
+   */
+  disabled?: boolean;
 }) {
   const { colors } = useTheme();
 
@@ -188,7 +195,8 @@ export function OptionGroup<T extends string>({
             <Pressable
               key={opt.value}
               accessibilityRole="radio"
-              accessibilityState={{ selected }}
+              accessibilityState={{ selected, disabled }}
+              disabled={disabled}
               onPress={() => onChange(opt.value)}
               style={({ pressed }) => ({
                 flex: columns ? 1 : undefined,
@@ -201,7 +209,7 @@ export function OptionGroup<T extends string>({
                 borderWidth: selected ? 2 : 1,
                 borderColor: selected ? colors.ring : colors.border,
                 backgroundColor: selected ? colors.muted : colors.card,
-                opacity: pressed ? 0.8 : 1,
+                opacity: disabled && !selected ? 0.45 : pressed ? 0.8 : 1,
               })}
             >
               <Row gap="sm">
@@ -254,7 +262,10 @@ export function SegmentedControl<T extends string>({
             onPress={() => onChange(opt.value)}
             style={{
               flex: 1,
-              minHeight: 38,
+              // MASTER.md's 44pt floor. It used to be 38, which is a miss on
+              // any segment, and this control now also carries the
+              // subscription-plan choice.
+              minHeight: TOUCH_TARGET,
               alignItems: "center",
               justifyContent: "center",
               borderRadius: radius.full,

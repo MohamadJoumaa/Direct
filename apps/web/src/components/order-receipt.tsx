@@ -5,7 +5,7 @@ import { Clock, MapPin, Package, Zap } from "lucide-react";
 import type { Order, Warehouse } from "@/lib/demo-store";
 import { formatOrderNumber } from "@/lib/demo-store";
 import { Badge } from "@/components/ui/badge";
-import { orderStatusLabel, useI18n } from "@/lib/i18n";
+import { formatDateTime, orderStatusLabel, useI18n } from "@/lib/i18n";
 import { locationLabel } from "@/lib/place-name";
 import { cn } from "@/lib/utils";
 
@@ -43,13 +43,9 @@ export function OrderReceipt({
 }) {
   const { dict, lang } = useI18n();
   const isDraft = order.order_number == null;
-  const placed =
-    order.created_at != null
-      ? new Date(order.created_at).toLocaleString(lang === "ar" ? "ar-LB" : "en-GB", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        })
-      : null;
+  // day/month/year, the same on every device and in both languages — a
+  // receipt is read next to other receipts, so the order must never move.
+  const placed = order.created_at != null ? formatDateTime(order.created_at) : null;
 
   return (
     <article className="overflow-hidden rounded-2xl border-2 bg-card">

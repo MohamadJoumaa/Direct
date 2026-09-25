@@ -5,6 +5,10 @@ const mapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 
 module.exports = ({ config }) => ({
   ...config,
+  // Appended here rather than listed in app.json: app.json has no way to
+  // express a local plugin path relative to the project, and this one has to
+  // run for every Android build.
+  plugins: [...(config.plugins ?? []), "./plugins/with-package-queries"],
   ios: {
     ...config.ios,
     config: { ...config.ios?.config, googleMapsApiKey: mapsKey || undefined },

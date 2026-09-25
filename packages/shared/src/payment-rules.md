@@ -30,8 +30,42 @@ confirms in Budget → Whish.
 
 ## Company Whish number
 
-Contact / support only. Never treat a typed number or “I sent it to 81…” as
-paid.
+Contact / support only **for the collect flow**. Never treat a typed number or
+“I sent it to 81…” as paid.
+
+## Mobile: Whish → Whish transfer (Expo)
+
+The Expo app has no merchant credentials to reach, so `DriverPaySheet` hands
+the driver to the Whish app (`apps/mobile/src/lib/whish-transfer.ts`) for a
+Whish → Whish transfer to `settings.whish_number`, with the number and amount
+copied to the clipboard.
+
+This changes **who** confirms, not **what** counts as proof:
+
+- Opening the Whish app unlocks nothing.
+- Returning from it unlocks nothing.
+- The driver’s “I sent it — confirm” writes a **pending** `manual`
+  `whish_transactions` row (with their typed reference in `note`) and unlocks
+  nothing. `driverPaymentBlocked` still holds.
+- Only an admin calling `confirmWhish` in Budget → Whish extends the
+  subscription or clears the commission — the same mutation the web’s manual
+  path has always used.
+
+There is exactly **one** open request per driver per `kind`:
+`requestSubscriptionPayment` updates the existing pending row instead of adding
+a second one, so a double tap cannot read as two payments owed.
+
+`apps/mobile/src/lib/whish.ts` and `hooks/use-whish-collect.ts` are kept and
+parked. When merchant credentials exist, re-wire them into `DriverPaySheet`:
+collect is verifiable and a P2P transfer never will be.
+
+## Admin waiver
+
+Not a flag that sits on forever. `setDriverPaymentWaived(…, true)` credits one
+cycle of the driver's own plan (`waiverGrantMs`): monthly +30 days, daily +24h,
+percentage +24h plus a confirmed zero-or-more `commission` transaction writing
+off whatever `dueNow` stood at. The subscription extension is additive, and the
+grant lapses by itself.
 
 ## Percentage: daily settle at 07:00 Asia/Beirut
 

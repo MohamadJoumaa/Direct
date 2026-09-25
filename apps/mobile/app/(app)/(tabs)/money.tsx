@@ -11,7 +11,7 @@ import { Divider, Row, Stack } from "@/components/ui/layout";
 import { Screen } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { useI18n } from "@/lib/i18n";
+import { formatDate, formatDateTime, useI18n } from "@/lib/i18n";
 import { useStore } from "@/lib/store-context";
 
 /**
@@ -65,6 +65,11 @@ export default function AdminMoney() {
                   { value: "7", label: dict.driver.lastWeek },
                 ]}
               />
+              {/* Which day "last week" actually is. The figures below are for
+                  one specific date and the segment labels do not say which. */}
+              <Text variant="caption" color="mutedForeground" numeric>
+                {formatDate(day)}
+              </Text>
               <Row justify="space-between">
                 <Text variant="callout" color="mutedForeground">
                   {dict.admin.daySubscriptions}
@@ -117,8 +122,17 @@ export default function AdminMoney() {
                           <Text variant="callout" weight="semibold" numberOfLines={1}>
                             {profile?.full_name ?? tx.driver_id}
                           </Text>
-                          <Text variant="caption" color="mutedForeground" numberOfLines={1}>
+                          {/* Two lines: a manual Whish → Whish row carries the
+                              driver's transfer reference here, and it is the
+                              only thing the admin has to match against the
+                              company account before approving. */}
+                          <Text variant="caption" color="mutedForeground" numberOfLines={2}>
                             {tx.note}
+                          </Text>
+                          {/* When the driver said they sent it — the other half
+                              of matching it against the company account. */}
+                          <Text variant="caption" color="mutedForeground" numeric>
+                            {formatDateTime(tx.created_at)}
                           </Text>
                         </Stack>
                         <Stack gap={4} align="flex-end">
