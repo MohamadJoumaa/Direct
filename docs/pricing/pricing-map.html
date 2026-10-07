@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Direct Pricing Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; Direct's monochrome surfaces, blue accent, gold hairlines only */
+:root {
+  --bg: #ffffff;
+  --surface: #f5f6f8;
+  --surface-2: #eceef2;
+  --fg: #0b0d12;
+  --muted: #5b6170;
+  --line: #dfe2e8;
+  --accent: #2563eb;
+  --accent-soft: #e6eefd;
+  --gold: #d4af37;
+  --ok: #15803d;
+  --ok-soft: #e3f4e8;
+  --warn: #a15c07;
+  --warn-soft: #fbf0dc;
+  --bad: #b42318;
+  --off: #6b7280;
+  --off-soft: #eef0f3;
+  --moto: #0b0d12;
+  --moto-fg: #ffffff;
+  --car: #2563eb;
+  --eco: #8a93a6;
+  --font-body: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a0b0e; --surface: #15171c; --surface-2: #1d2027; --fg: #f3f4f6; --muted: #a0a6b3;
+    --line: #2a2e37; --accent: #4d82f3; --accent-soft: #16213a;
+    --ok: #4ade80; --ok-soft: #12261a; --warn: #f0b45a; --warn-soft: #2a2010; --bad: #f87171;
+    --off: #9aa1ad; --off-soft: #1d2027;
+    --moto: #f3f4f6; --moto-fg: #0a0b0e; --car: #4d82f3; --eco: #6b7385;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a0b0e; --surface: #15171c; --surface-2: #1d2027; --fg: #f3f4f6; --muted: #a0a6b3;
+  --line: #2a2e37; --accent: #4d82f3; --accent-soft: #16213a;
+  --ok: #4ade80; --ok-soft: #12261a; --warn: #f0b45a; --warn-soft: #2a2010; --bad: #f87171;
+  --off: #9aa1ad; --off-soft: #1d2027;
+  --moto: #f3f4f6; --moto-fg: #0a0b0e; --car: #4d82f3; --eco: #6b7385;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 40px 20px 80px; display: grid; gap: 56px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 15px; font-weight: 700; }
+p { margin: 0; }
+b { font-weight: 700; }
+.muted { color: var(--muted); }
+.small { font-size: 13.5px; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+section { display: grid; gap: 18px; }
+.sec-head { display: grid; gap: 6px; padding-top: 14px; border-top: 1px solid var(--gold); }
+.sec-head p { color: var(--muted); max-width: 65ch; }
+.num { font-variant-numeric: tabular-nums; }
+.formula { font-family: var(--font-mono); font-size: 13.5px; background: var(--surface); border-radius: 10px; padding: 12px 14px; overflow-x: auto; white-space: pre; line-height: 1.7; }
+.card { border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.box { background: var(--surface); border-radius: 12px; padding: 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.box ul { margin: 0; padding-inline-start: 18px; display: grid; gap: 5px; font-size: 14px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+
+.chip { display: inline-block; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); white-space: nowrap; }
+.chip.moto { background: var(--moto); color: var(--moto-fg); }
+.chip.car { background: var(--car); color: #fff; }
+.chip.eco { background: var(--eco); color: #fff; }
+.st { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 5px; letter-spacing: 0.02em; white-space: nowrap; }
+.st.ok { background: var(--ok-soft); color: var(--ok); }
+.st.wait { background: var(--warn-soft); color: var(--warn); }
+.st.off { background: var(--off-soft); color: var(--off); }
+
+/* progress */
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.step { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+.step.done { border-color: var(--ok); }
+.step.now { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.step .eyebrow { font-size: 11px; }
+
+/* flow */
+.flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; }
+.node { flex: 1 1 170px; min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 6px; align-content: start; }
+.arrow { display: grid; place-items: center; color: var(--muted); font-size: 20px; flex: 0 0 auto; }
+@media (max-width: 720px) { .arrow { width: 100%; transform: rotate(90deg); height: 18px; } }
+
+/* ranges (to scale, 0–250 km) */
+.ranges { display: grid; gap: 10px; overflow-x: auto; }
+.rrow { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 10px; min-width: 520px; }
+.rlabel { font-weight: 700; font-size: 14px; }
+.track { position: relative; height: 34px; background: repeating-linear-gradient(135deg, var(--surface) 0 6px, var(--surface-2) 6px 12px); border-radius: 8px; }
+.fill { position: absolute; top: 0; bottom: 0; border-radius: 8px; display: flex; align-items: center; padding: 0 10px; font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+.fill.moto { background: var(--moto); color: var(--moto-fg); }
+.fill.car { background: var(--car); color: #fff; }
+.fill.eco { background: var(--eco); color: #fff; }
+.raxis { position: relative; height: 20px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+.raxis span { position: absolute; transform: translateX(-50%); }
+.raxis span:first-child { transform: none; }
+.raxis span:last-child { transform: translateX(-100%); }
+
+/* phone examples */
+.phones { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.phone { border: 1px solid var(--line); border-radius: 22px; padding: 16px; display: grid; gap: 10px; background: var(--bg); }
+.trip { font-size: 13px; color: var(--muted); }
+.opt { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); }
+.opt .name { font-weight: 700; }
+.opt .price { font-weight: 700; text-align: end; }
+.opt .sub { font-size: 12.5px; color: var(--muted); grid-column: 1 / -1; }
+.opt.disabled { opacity: 0.45; border-style: dashed; }
+.opt.disabled .sub { color: var(--fg); }
+
+/* chart */
+.chart svg { width: 100%; height: auto; display: block; min-width: 520px; }
+.chartwrap { overflow-x: auto; }
+.t-axis { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.t-lab { fill: var(--fg); font-family: var(--font-body); font-size: 12.5px; font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
+
+/* tables */
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: start; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+td.r, th.r { text-align: end; font-variant-numeric: tabular-nums; }
+tr.hl td { background: var(--warn-soft); }
+
+/* admin demo */
+.admin { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: grid; }
+.admin-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 18px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.admin-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 0; }
+@media (max-width: 720px) { .admin-body { grid-template-columns: 1fr; } }
+.fields { padding: 18px; display: grid; gap: 14px; align-content: start; border-inline-end: 1px solid var(--line); }
+@media (max-width: 720px) { .fields { border-inline-end: 0; border-bottom: 1px solid var(--line); } }
+.field { display: grid; gap: 5px; }
+.field label { font-size: 13px; font-weight: 600; }
+.field .hint { font-size: 12px; color: var(--muted); }
+.inp { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); overflow: hidden; }
+.inp span { padding: 0 10px; color: var(--muted); font-size: 14px; background: var(--surface); align-self: stretch; display: grid; place-items: center; }
+.inp input, .inp select { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg); font: inherit; font-variant-numeric: tabular-nums; padding: 10px 12px; min-height: 44px; }
+.inp:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.preview { padding: 18px; display: grid; gap: 12px; align-content: start; }
+.reset { font: inherit; font-size: 13px; font-weight: 600; border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 10px; padding: 8px 14px; min-height: 40px; cursor: pointer; }
+.reset:hover { background: var(--surface-2); }
+.reset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.changed { color: var(--accent); font-weight: 700; }
+
+.parked { display: flex; flex-wrap: wrap; gap: 8px; }
+.parked span { font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px dashed var(--muted); color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .changed { transition: color 200ms ease; } }
+
+/* market comparison */
+.cmp { display: grid; gap: 10px; overflow-x: auto; }
+.crow { display: grid; grid-template-columns: 170px 1fr 92px; gap: 12px; align-items: center; min-width: 560px; }
+.cname { font-size: 13.5px; font-weight: 600; }
+.cname small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+.ctrack { position: relative; height: 22px; background: var(--surface); border-radius: 6px; }
+.cbar { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; background: var(--eco); }
+.cbar.us { background: var(--accent); }
+.cval { font-size: 13px; text-align: end; font-variant-numeric: tabular-nums; }
+.caxis { position: relative; height: 18px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.caxis span { position: absolute; transform: translateX(-50%); }
+.cgroup { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-top: 8px; min-width: 560px; }
+.src { font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.src a { color: var(--accent); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.fact { background: var(--surface); border-radius: 12px; padding: 14px 16px; display: grid; gap: 4px; }
+.fact .v { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.fact .l { font-size: 12.5px; color: var(--muted); }
+</style>
+
+<div class="wrap">
+
+<header style="display:grid;gap:14px">
+  <span class="eyebrow">Direct · Pricing model · Confirmed decisions</span>
+  <h1>How a delivery price is decided</h1>
+  <p class="muted" style="max-width:65ch">What has been decided, what it replaced, and why. Prices shown are the <b style="color:var(--fg)">proposed first settings</b> from the market research at the end of the page. Every number is a field the admin can change.</p>
+</header>
+
+
+<!-- SUMMARY -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Summary</span>
+    <h2>Decisions at a glance</h2>
+    <p>Each row is confirmed. Details and examples follow below.</p>
+  </div>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Topic</th><th>Chosen</th><th>Instead of</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td><b>Which options show</b></td><td>Greyed out only because of distance (and Car at night)</td><td>Hiding options by price</td><td class="small">The same distance always shows the same options</td></tr>
+        <tr><td><b>Urgency</b></td><td>Comes from the vehicle: Moto and Car are same day, Economy takes 2–3 days</td><td>An "urgent ×3" option</td><td class="small">The vehicle already says how fast it is</td></tr>
+        <tr><td><b>Moto price</b></td><td>Start price + price per km, rounded to $0.50</td><td>Price list by distance groups</td><td class="small">No price jumps: 200 m more never costs $3 more</td></tr>
+        <tr><td><b>Car price</b></td><td>Same method, its own numbers</td><td>Moto price × 2</td><td class="small">A car costs more to start any trip; long trips stay fair</td></tr>
+        <tr><td><b>Car boxes</b></td><td>One price per trip for now</td><td>$5 per box, or letting the client choose</td><td class="small">Per box ignores distance; clients would always pick the cheaper method</td></tr>
+        <tr><td><b>Economy</b></td><td>Partner company delivers; client sees only "Direct Economy"</td><td>Showing the company</td><td class="small">The partner stays hidden</td></tr>
+        <tr><td><b>Economy drop-off</b></td><td>At Direct's place</td><td>At the company</td><td class="small">The partner stays hidden</td></tr>
+        <tr><td><b>Economy pickup price</b></td><td>The Moto price to the company</td><td>One flat pickup fee</td><td class="small">Clients close by pay less; no new numbers</td></tr>
+        <tr><td><b>Company prices</b></td><td>A region table per company; the system picks the cheapest total</td><td>Distance bands; admin picks per order</td><td class="small">Matches how couriers quote; no manual work</td></tr>
+        <tr><td><b>Direct's share on Economy</b></td><td>Yes, one field for each way</td><td>No share</td><td class="small">Driver payments only cover the pickup</td></tr>
+        <tr><td><b>Economy tracking</b></td><td>Live map until pickup, then status updates</td><td>Live map all the way</td><td class="small">The map would reveal the company</td></tr>
+        <tr><td><b>Taxi Moto price</b></td><td>Distance only</td><td>Time, a mix, or a client choice</td><td class="small">Price known before the ride; map time is for cars</td></tr>
+        <tr><td><b>Taxi Moto range</b></td><td>0–25 km</td><td>0–50 km like packages</td><td class="small">Passenger safety on highways</td></tr>
+        <tr><td><b>Night (midnight–6 am)</b></td><td>Moto and Taxi Moto +$1; Car not offered; Economy none</td><td>One surcharge for all</td><td class="small">Car hours are an admin setting (e.g. until 10 pm)</td></tr>
+        <tr><td><b>Driver gender preference</b></td><td>Affects matching only</td><td>Changing the price</td><td class="small">Never a price factor</td></tr>
+        <tr><td><b>Admin control</b></td><td>Plain fields per option, plus a warning</td><td>Multipliers</td><td class="small">Each field means one thing a driver understands</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="box">
+    <h3>Still open</h3>
+    <ul class="small">
+      <li><b>Economy pickup vs Moto:</b> proposal is drop-off from 20 km, Direct pickup from 30 km, so Economy stays cheaper than Moto.</li>
+      <li><b>Economy pickup cap:</b> about $4.</li>
+      <li><b>Driver payments (step 6):</b> subscription and percentage per vehicle. The monthly price must come down from the first proposal.</li>
+      <li><b>Ask each partner company:</b> does your price include pickup from the sender? What are your real prices per region?</li>
+      <li><b>Ask drivers:</b> how many trips they really do per day.</li>
+      <li><b>Verify:</b> the longest trip in Lebanon (~250 km).</li>
+    </ul>
+  </div>
+</section>
+
+<!-- PROGRESS -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Where we are</span>
+    <h2>One option at a time</h2>
+  </div>
+  <div class="steps">
+    <div class="step done"><span class="eyebrow">Step 1 · Package</span><h3>Moto</h3><span class="st ok">Confirmed</span></div>
+    <div class="step done"><span class="eyebrow">Step 2 · Package</span><h3>Car</h3><span class="st ok">Confirmed</span></div>
+    <div class="step done"><span class="eyebrow">Step 3 · Package</span><h3>Economy</h3><span class="st ok">Confirmed</span></div>
+    <div class="step done"><span class="eyebrow">Step 4 · Taxi</span><h3>Moto</h3><span class="st ok">Confirmed</span></div>
+    <div class="step done"><span class="eyebrow">Step 5</span><h3>Final check</h3><span class="st ok">Confirmed</span></div>
+    <div class="step now"><span class="eyebrow">Step 6</span><h3>Driver payments</h3><span class="st wait">Next</span></div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">How an order is priced</span>
+    <h2>Two pins, one distance, three prices</h2>
+    <p>Packages only for now. Size is not asked yet. Each option has its own formula.</p>
+  </div>
+  <div class="flow">
+    <div class="node"><span class="eyebrow">1</span><h3>Client sets two pins</h3><p class="muted small">Pickup and destination.</p></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="node"><span class="eyebrow">2</span><h3>System measures the road distance</h3><p class="muted small">Real driving km, not a straight line.</p></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="node"><span class="eyebrow">3</span><h3>Client sees each option with its price</h3><p class="muted small">An option that doesn't fit the distance is greyed out, with the reason.</p></div>
+  </div>
+</section>
+
+<!-- RANGES -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Distance ranges</span>
+    <h2>Which options can be pressed at each distance</h2>
+    <p>Drawn to scale. Every limit is an admin setting.</p>
+  </div>
+  <div class="card">
+    <div class="ranges">
+      <div class="rrow"><span class="rlabel">Moto</span><div class="track"><div class="fill moto" style="inset-inline-start:0;width:20%">0–50 km · same day</div></div></div>
+      <div class="rrow"><span class="rlabel">Car</span><div class="track"><div class="fill car" style="inset-inline-start:0;width:40%">0–100 km · same day</div></div></div>
+      <div class="rrow"><span class="rlabel">Economy</span><div class="track"><div class="fill eco" style="inset-inline-start:8%;width:92%">20 km → all of Lebanon · 2–3 days</div></div></div>
+      <div class="rrow"><span class="rlabel">Taxi Moto</span><div class="track"><div class="fill moto" style="inset-inline-start:0;width:10%">0–25 km</div></div></div>
+      <div class="rrow"><span></span><div class="raxis"><span style="inset-inline-start:0">0</span><span style="inset-inline-start:8%">20</span><span style="inset-inline-start:20%">50</span><span style="inset-inline-start:40%">100</span><span style="inset-inline-start:100%">~250 km</span></div></div>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Distance</th><th>Client can press</th></tr></thead>
+        <tbody>
+          <tr><td class="num">0–20 km</td><td><span class="chip moto">Moto</span> <span class="chip car">Car</span></td></tr>
+          <tr><td class="num">20–50 km</td><td><span class="chip moto">Moto</span> <span class="chip car">Car</span> <span class="chip eco">Economy</span></td></tr>
+          <tr><td class="num">50–100 km</td><td><span class="chip car">Car</span> <span class="chip eco">Economy</span></td></tr>
+          <tr><td class="num">100 km +</td><td><span class="chip eco">Economy</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">~250 km is an estimate of the longest trip in Lebanon, to verify before launch. Options are greyed out only because of distance (and Car at night), never because of price.</p>
+  </div>
+
+  <div class="phones">
+    <div class="phone">
+      <span class="trip">Example trip · <b style="color:var(--fg)">30 km</b></span>
+      <div class="opt"><span class="name">Moto</span><span class="price num">$10.00</span><span class="sub">Same day</span></div>
+      <div class="opt"><span class="name">Car</span><span class="price num">$18.00</span><span class="sub">Same day</span></div>
+      <div class="opt"><span class="name">Economy</span><span class="price num">from $5</span><span class="sub">2–3 days</span></div>
+    </div>
+    <div class="phone">
+      <span class="trip">Example trip · <b style="color:var(--fg)">120 km</b></span>
+      <div class="opt disabled" aria-disabled="true"><span class="name">Moto</span><span class="price">—</span><span class="sub">Only for trips up to 50 km</span></div>
+      <div class="opt disabled" aria-disabled="true"><span class="name">Car</span><span class="price">—</span><span class="sub">Only for trips up to 100 km</span></div>
+      <div class="opt"><span class="name">Economy</span><span class="price num">from $5</span><span class="sub">2–3 days</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- MOTO -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Step 1 · Package · Moto</span>
+    <h2>Method A: start price + price per km</h2>
+    <p>Confirmed. The price grows a little with every km, like a taxi meter, then rounds to the nearest $0.50.</p>
+  </div>
+  <div class="formula">price = start price  +  (km − km included) × price per km
+then round to the nearest $0.50
+
+example:  $3  +  (10 − 3) × $0.25  =  $4.75   →  client sees $5.00</div>
+
+  <div class="card chart">
+    <h3>Why A beat B</h3>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--accent)"></i>Method A · price per km (chosen)</span>
+      <span><i class="sw" style="background:var(--muted)"></i>Method B · price list by distance group</span>
+    </div>
+    <div class="chartwrap">
+    <svg viewBox="0 0 600 260" role="img" aria-label="Moto price from 0 to 50 km. Method A rises smoothly from $3 to $14.75. Method B jumps in steps: $3, $5, $8, $12. At 15 km, Method B jumps by $3.">
+      <!-- x = 50 + km*10.4 ; y = 220 - usd*12.5 -->
+      <g style="stroke:var(--line)" stroke-width="1">
+        <line x1="50" y1="220" x2="570" y2="220"/>
+        <line x1="50" y1="170" x2="570" y2="170" stroke-dasharray="3 4"/>
+        <line x1="50" y1="120" x2="570" y2="120" stroke-dasharray="3 4"/>
+        <line x1="50" y1="70" x2="570" y2="70" stroke-dasharray="3 4"/>
+        <line x1="50" y1="20" x2="570" y2="20" stroke-dasharray="3 4"/>
+      </g>
+      <text x="42" y="224" text-anchor="end" class="t-axis">$0</text>
+      <text x="42" y="174" text-anchor="end" class="t-axis">$4</text>
+      <text x="42" y="124" text-anchor="end" class="t-axis">$8</text>
+      <text x="42" y="74" text-anchor="end" class="t-axis">$12</text>
+      <text x="42" y="24" text-anchor="end" class="t-axis">$16</text>
+      <text x="50" y="240" text-anchor="middle" class="t-axis">0</text>
+      <text x="154" y="240" text-anchor="middle" class="t-axis">10</text>
+      <text x="258" y="240" text-anchor="middle" class="t-axis">20</text>
+      <text x="362" y="240" text-anchor="middle" class="t-axis">30</text>
+      <text x="466" y="240" text-anchor="middle" class="t-axis">40</text>
+      <text x="570" y="240" text-anchor="middle" class="t-axis">50 km</text>
+      <path d="M50,182.5 H102 V157.5 H206 V120 H362 V70 H570" fill="none" style="stroke:var(--muted)" stroke-width="2.5"/>
+      <path d="M50,182.5 L81.2,182.5 L570,35.6" fill="none" style="stroke:var(--accent)" stroke-width="3"/>
+      <line x1="206" y1="157.5" x2="206" y2="120" style="stroke:var(--bad)" stroke-width="3"/>
+      <circle cx="206" cy="145" r="5" style="fill:var(--accent)"/>
+      <text x="214" y="112" class="t-lab" style="fill:var(--bad)">+$3 for 200 metres</text>
+      <text x="214" y="176" class="t-lab" style="fill:var(--accent)">A: about $6.00</text>
+    </svg>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Two neighbours</th><th class="r">Distance</th><th class="r">Method A</th><th class="r">Method B</th></tr></thead>
+        <tbody>
+          <tr><td>Neighbour 1</td><td class="r">14.9 km</td><td class="r">$5.98</td><td class="r">$5</td></tr>
+          <tr class="hl"><td>Neighbour 2</td><td class="r">15.1 km</td><td class="r">$6.03</td><td class="r"><b>$8</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small"><b>With A</b>, similar trips always pay similar prices. <b>With B</b>, 200 metres costs $3 more, so clients feel cheated, argue with drivers, or move the pin to pay less. A is also how the current system already works.</p>
+  </div>
+</section>
+
+<!-- CAR -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Step 2 · Package · Car</span>
+    <h2>Same method as Moto, with its own numbers</h2>
+    <p>Confirmed. Start price + price per km, rounded to the nearest $0.50. One price per trip, whatever the number of boxes.</p>
+  </div>
+  <div class="formula">example:  $6  +  (20 − 3) × $0.45  =  $13.65   →  client sees $13.50</div>
+  <div class="card">
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Trip</th><th class="r">Moto</th><th class="r">Car</th></tr></thead>
+        <tbody>
+          <tr><td class="num">5 km</td><td class="r">$3.50</td><td class="r">$7.00</td></tr>
+          <tr><td class="num">10 km</td><td class="r">$5.00</td><td class="r">$9.00</td></tr>
+          <tr><td class="num">20 km</td><td class="r">$7.50</td><td class="r">$13.50</td></tr>
+          <tr><td class="num">50 km</td><td class="r">$15.00</td><td class="r">$27.00</td></tr>
+          <tr><td class="num">100 km</td><td class="r muted">not offered</td><td class="r">$49.50</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small"><b>Why not "Moto × 2":</b> a car costs more to start any trip (fuel, parking, Beirut traffic), but on long highway trips the gap matters less. Its own numbers let the admin raise the start price without making long trips too expensive.</p>
+  </div>
+  <div class="two">
+    <div class="box">
+      <h3>Boxes: distance only for now</h3>
+      <ul class="small">
+        <li><b>Not $5 per box alone:</b> 3 boxes over 2 km would be $15, and 3 boxes over 90 km also $15.</li>
+        <li><b>Not a client choice:</b> clients always pick the cheaper one, so Direct and the driver always lose.</li>
+        <li><b>Later, with size:</b> distance price + a fee per extra box. 20 km with 3 boxes = $13.50 + 2 × $2 = $17.50.</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>Noted for later: what drivers pay Direct</h3>
+      <ul class="small">
+        <li><b>Percentage:</b> same for Moto and Car. At 10%, a 20 km moto trip gives Direct $0.75 and a car trip $1.35.</li>
+        <li><b>Subscription:</b> a different price per vehicle, e.g. Moto $2/day, Car $3/day, since a flat fee doesn't grow with the fare.</li>
+      </ul>
+      <span class="st off">Not decided · parked topic</span>
+    </div>
+  </div>
+</section>
+
+<!-- ADMIN DEMO -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Admin settings</span>
+    <h2>The admin changes numbers, the prices follow</h2>
+    <p>Each vehicle gets its own small group of fields in Admin → Settings. Try it: change a field and the example prices update instantly. This is a preview of the idea, not the real screen.</p>
+  </div>
+  <div class="admin">
+    <div class="admin-top">
+      <h3>Moto pricing</h3>
+      <button type="button" class="reset" id="reset">Reset to proposed values</button>
+    </div>
+    <div class="admin-body">
+      <div class="fields">
+        <div class="field">
+          <label for="start">Start price</label>
+          <div class="inp"><span>$</span><input id="start" type="number" min="0" step="0.5" value="3" inputmode="decimal"></div>
+          <span class="hint">What the shortest trips cost.</span>
+        </div>
+        <div class="field">
+          <label for="incl">Km included in the start price</label>
+          <div class="inp"><input id="incl" type="number" min="0" step="1" value="3" inputmode="decimal"><span>km</span></div>
+        </div>
+        <div class="field">
+          <label for="perkm">Price per extra km</label>
+          <div class="inp"><span>$</span><input id="perkm" type="number" min="0" step="0.05" value="0.25" inputmode="decimal"></div>
+        </div>
+        <div class="field">
+          <label for="round">Round to the nearest</label>
+          <div class="inp"><select id="round"><option value="0.5" selected>$0.50</option><option value="1">$1.00</option><option value="0.25">$0.25</option></select></div>
+        </div>
+      </div>
+      <div class="preview">
+        <span class="eyebrow">What clients see</span>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Trip</th><th class="r">Exact</th><th class="r">Client sees</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <p class="muted small">Prices change for every new order right away. Orders already placed keep their price.</p>
+      </div>
+    </div>
+  </div>
+  <div class="two">
+    <div class="box">
+      <h3>Why plain fields, not a multiplier</h3>
+      <p class="small">Each field means one thing you can explain to a driver: "the first 3 km cost $3, then 25 cents per km". A multiplier like ×1.3 hides what the client actually pays.</p>
+    </div>
+    <div class="box">
+      <h3>Every admin setting so far</h3>
+      <ul class="small">
+        <li>Range of each option (min and max km)</li>
+        <li>Moto: start price, km included, price per km, rounding</li>
+        <li>Car: start price, km included, price per km, rounding</li>
+        <li>Economy: drop-off fee, company price tables, Direct's share for each way, company on/off and preferred</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ECONOMY -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Step 3 · Package · Economy</span>
+    <h2>A partner company delivers, the client only sees Direct</h2>
+    <p>Confirmed. Delivered in 2–3 days. The client sees "Direct Economy" and never the company's name.</p>
+  </div>
+  <div class="formula">price  =  ① pickup  +  ② company price  +  ③ Direct's share</div>
+
+  <div class="card">
+    <h3>Two ways to send</h3>
+    <div class="flow">
+      <div class="node"><span class="eyebrow">Direct picks up</span><h3>Client → company, by a Direct driver</h3><p class="muted small">Pickup costs the Moto price for that trip. Only the driver sees the company.</p></div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="node"><span class="eyebrow">2–3 days</span><h3>Company → destination</h3></div>
+    </div>
+    <div class="flow">
+      <div class="node"><span class="eyebrow">Client drops off</span><h3>Client brings it to Direct</h3><p class="muted small">No pickup cost. The company stays hidden.</p></div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="node"><span class="eyebrow">Once a day</span><h3>Direct → company</h3><p class="muted small">All drop-offs in one trip, covered by Direct's share.</p></div>
+      <div class="arrow" aria-hidden="true">→</div>
+      <div class="node"><span class="eyebrow">2–3 days</span><h3>Company → destination</h3></div>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th></th><th class="r">Direct picks up</th><th class="r">Client drops off</th></tr></thead>
+        <tbody>
+          <tr><td>① Pickup</td><td class="r">$3 (Moto price)</td><td class="r">$0</td></tr>
+          <tr><td>② Company price</td><td class="r">$4</td><td class="r">$4</td></tr>
+          <tr><td>③ Direct's share</td><td class="r">$1</td><td class="r">$1</td></tr>
+          <tr><td><b>Client sees</b></td><td class="r"><b>$8</b></td><td class="r"><b>$5</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small"><b>Tracking:</b> the client sees the live map only until pickup, then status updates only, so the company stays hidden.</p>
+    <p class="muted small">Assumption: the company does not pick up from the client. If a company says its price includes pickup, ① is removed and nothing else changes. With drop-off, the 2–3 days start when the package reaches Direct.</p>
+  </div>
+
+  <div class="card">
+    <h3>Company prices: one region table per company</h3>
+    <p class="small muted">5 regions, same price both directions, so 15 prices per company. Example for one company:</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>From \ To</th><th class="r">Beirut</th><th class="r">Mount Lebanon</th><th class="r">North</th><th class="r">South</th><th class="r">Bekaa</th></tr></thead>
+        <tbody>
+          <tr><td>Beirut</td><td class="r">$3</td><td class="r">$3.5</td><td class="r">$5</td><td class="r">$4.5</td><td class="r">$5</td></tr>
+          <tr><td>Mount Lebanon</td><td class="r muted">same</td><td class="r">$3</td><td class="r">$4.5</td><td class="r">$5</td><td class="r">$5</td></tr>
+          <tr><td>North</td><td class="r muted">same</td><td class="r muted">same</td><td class="r">$3</td><td class="r">$6</td><td class="r">$6</td></tr>
+          <tr><td>South</td><td class="r muted">same</td><td class="r muted">same</td><td class="r muted">same</td><td class="r">$3</td><td class="r">$5.5</td></tr>
+          <tr><td>Bekaa</td><td class="r muted">same</td><td class="r muted">same</td><td class="r muted">same</td><td class="r muted">same</td><td class="r">$3</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>The system picks the cheapest company for each order</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Route</th><th class="r">Company A</th><th class="r">Company B</th><th class="r">System picks</th></tr></thead>
+        <tbody>
+          <tr><td>Beirut → South</td><td class="r">$4.5</td><td class="r"><b>$4</b></td><td class="r">B</td></tr>
+          <tr><td>Beirut → North</td><td class="r"><b>$5</b></td><td class="r">$5.5</td><td class="r">A</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small muted">When Direct picks up, the pickup price depends on how far each company is, so the system compares the full price (pickup + company) and picks the cheapest total. The admin can switch a company off, and mark one as preferred when two cost the same.</p>
+  </div>
+
+  <div class="two">
+    <div class="box">
+      <h3>Why Direct takes a share</h3>
+      <p class="small">The driver's subscription or percentage only covers the pickup. Without a share, Direct earns nothing on the company part but still handles the order, the support and the risk. It can start at $0 and be raised later.</p>
+    </div>
+    <div class="box">
+      <h3>Economy admin settings</h3>
+      <ul class="small">
+        <li>Pickup: follows the Moto settings</li>
+        <li>Drop-off fee: default $0</li>
+        <li>Company price tables, one per company</li>
+        <li>Direct's share: one field for each way</li>
+        <li>Company on/off and preferred</li>
+        <li>Direct's drop-off address and hours</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- TAXI -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Step 4 · Taxi · Moto</span>
+    <h2>A person on a moto: priced by distance</h2>
+    <p>Confirmed. Start price + price per km, with its own numbers, rounded to the nearest $0.50. The price is known before the ride.</p>
+  </div>
+  <div class="formula">example:  $3  +  (10 − 3) × $0.30  =  $5.10   →  client sees $5.00</div>
+  <div class="card">
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Method</th><th>How</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td><b>A. Distance</b></td><td>Start + per km</td><td><span class="st ok">Chosen</span> Price known before the ride.</td></tr>
+          <tr><td><b>B. Time</b></td><td>Per minute of the ride</td><td class="small">Only known after the ride. Traffic causes arguments.</td></tr>
+          <tr><td><b>C. Mix</b></td><td>Start + per km + per minute</td><td class="small">The map's time is for cars. In traffic it may say 45 min while a moto takes 20.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small"><b>No client choice between methods:</b> the client would pick the cheapest for that traffic, so the driver always loses. The real choice is the vehicle.</p>
+  </div>
+  <div class="two">
+    <div class="box">
+      <h3>Later: Taxi · Car uses C</h3>
+      <p class="small">Distance + time from the map, with the price fixed at booking. Traffic really slows a car, and the map's time is accurate for cars.</p>
+    </div>
+    <div class="box">
+      <h3>Later: waiting time for shopping</h3>
+      <p class="small">A separate add-on, picked in blocks before the trip. Example: 15 min $3 · 30 min $6 · 60 min $12. Going over is charged at the same rate, confirmed by the driver.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Step 5 · Final check</span>
+    <h2>All prices side by side</h2>
+    <p>Proposed first settings. Moto must always cost more than Economy from 20 to 50 km. The highlighted row breaks that rule for Economy with pickup, which is why Direct pickup is proposed to start at 30 km.</p>
+  </div>
+  <div class="card">
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Trip</th><th class="r">Moto</th><th class="r">Car</th><th class="r">Economy drop-off</th><th class="r">Economy pickup</th><th class="r">Taxi Moto</th></tr></thead>
+        <tbody>
+          <tr><td class="num">5 km</td><td class="r">$3.50</td><td class="r">$7.00</td><td class="r muted">—</td><td class="r muted">—</td><td class="r">$3.50</td></tr>
+          <tr><td class="num">10 km</td><td class="r">$5.00</td><td class="r">$9.00</td><td class="r muted">—</td><td class="r muted">—</td><td class="r">$5.00</td></tr>
+          <tr class="hl"><td class="num">20 km</td><td class="r">$7.50</td><td class="r">$13.50</td><td class="r">$4.50</td><td class="r"><b>$8.50</b></td><td class="r">$8.00</td></tr>
+          <tr><td class="num">50 km</td><td class="r">$15.00</td><td class="r">$27.00</td><td class="r">$5.50</td><td class="r">$9.50</td><td class="r muted">—</td></tr>
+          <tr><td class="num">100 km</td><td class="r muted">—</td><td class="r">$49.50</td><td class="r">$6.00</td><td class="r">$10.00</td><td class="r muted">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="two">
+    <div class="box">
+      <h3>Admin warning</h3>
+      <p class="small">If the numbers make Moto cheaper than Economy anywhere from 20 to 50 km, Settings shows a warning. It never hides an option or blocks saving.</p>
+    </div>
+    <div class="box">
+      <h3>Night surcharge (midnight to 6 am)</h3>
+      <ul class="small">
+        <li>Moto packages: +$1</li>
+        <li>Car: not offered at night. Working hours are an admin setting, e.g. until 10 pm</li>
+        <li>Economy: none, and no Direct pickup at night</li>
+        <li>Taxi Moto: +$1</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- MARKET -->
+<section id="market">
+  <div class="sec-head">
+    <span class="eyebrow">Market research · 7 October 2026</span>
+    <h2>How Direct compares with what Lebanon pays today</h2>
+    <p>Competitor prices, fuel and driver costs, used to propose the first real settings. The Direct prices below are a proposal to review, not final.</p>
+  </div>
+
+  <div class="facts">
+    <div class="fact"><span class="v">$1.58</span><span class="l">Petrol 95 per litre (2,825,000 LBP per 20 L, 6 Oct 2026)</span></div>
+    <div class="fact"><span class="v">$0.13 / km</span><span class="l">Moto running cost: fuel, return trips, upkeep (estimate)</span></div>
+    <div class="fact"><span class="v">$0.35 / km</span><span class="l">Car running cost: fuel, empty return, upkeep (estimate)</span></div>
+    <div class="fact"><span class="v">$150 / week</span><span class="l">Salaried moto delivery job, bike and fuel provided</span></div>
+  </div>
+
+  <div class="card">
+    <h3>Competitors</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Company</th><th>Service</th><th>Speed</th><th class="r">Price</th></tr></thead>
+        <tbody>
+          <tr><td><b>Toters</b></td><td>Delivery app, last-mile in Beirut</td><td>Same day</td><td class="r">$3–6</td></tr>
+          <tr><td><b>Wakilni</b></td><td>Courier, inside Beirut</td><td>Same / next day</td><td class="r">$2–6</td></tr>
+          <tr><td><b>Wakilni</b></td><td>Courier, anywhere in Lebanon</td><td>1–3 working days</td><td class="r">$6–15+</td></tr>
+          <tr><td><b>Aramex · DHL · FedEx</b></td><td>National couriers</td><td>1–3 days</td><td class="r muted">no public list</td></tr>
+          <tr><td><b>Uber X</b></td><td>Car ride in Beirut</td><td>Now</td><td class="r">$1.70 + $0.38/km + $0.10/min</td></tr>
+          <tr><td><b>Regional couriers</b></td><td>North, South, Bekaa</td><td>1–3 days</td><td class="r">$5–10 above Beirut</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Price ranges side by side</h3>
+    <div class="legend"><span><i class="sw" style="background:var(--accent);height:8px"></i>Direct (proposal)</span><span><i class="sw" style="background:var(--eco);height:8px"></i>Competitor</span></div>
+    <div class="cmp">
+      <div class="cgroup">Package in Beirut, same day (5–10 km)</div>
+      <div class="crow"><span class="cname">Toters<small>app delivery</small></span><div class="ctrack"><div class="cbar" style="inset-inline-start:18.75%;width:18.75%"></div></div><span class="cval">$3–6</span></div>
+      <div class="crow"><span class="cname">Wakilni<small>inside Beirut</small></span><div class="ctrack"><div class="cbar" style="inset-inline-start:12.50%;width:25.00%"></div></div><span class="cval">$2–6</span></div>
+      <div class="crow"><span class="cname">Direct Moto<small>5–10 km</small></span><div class="ctrack"><div class="cbar us" style="inset-inline-start:21.88%;width:9.38%"></div></div><span class="cval">$3.50–5.00</span></div>
+      <div class="cgroup">Across Lebanon, 1–3 days</div>
+      <div class="crow"><span class="cname">Wakilni<small>anywhere in Lebanon</small></span><div class="ctrack"><div class="cbar" style="inset-inline-start:37.50%;width:56.25%"></div></div><span class="cval">$6–15+</span></div>
+      <div class="crow"><span class="cname">Direct Economy<small>drop-off or pickup</small></span><div class="ctrack"><div class="cbar us" style="inset-inline-start:31.25%;width:28.12%"></div></div><span class="cval">$5.00–9.50</span></div>
+      <div class="cgroup">A 10 km trip</div>
+      <div class="crow"><span class="cname">Uber X<small>car ride, ~25 min</small></span><div class="ctrack"><div class="cbar" style="inset-inline-start:46.88%;width:6.25%"></div></div><span class="cval">~$8</span></div>
+      <div class="crow"><span class="cname">Direct Taxi Moto<small>person on a moto</small></span><div class="ctrack"><div class="cbar us" style="inset-inline-start:30.50%;width:1.50%"></div></div><span class="cval">$5.00</span></div>
+      <div class="crow"><span class="cname">Direct Car<small>package by car</small></span><div class="ctrack"><div class="cbar us" style="inset-inline-start:55.50%;width:1.50%"></div></div><span class="cval">$9.00</span></div>
+      <div class="crow"><span></span><div class="caxis"><span style="inset-inline-start:0.00%">$0</span><span style="inset-inline-start:25.00%">$4</span><span style="inset-inline-start:50.00%">$8</span><span style="inset-inline-start:75.00%">$12</span><span style="inset-inline-start:100.00%">$16</span></div><span></span></div>
+    </div>
+    <p class="small"><b>What it shows:</b> Direct Moto sits in the middle of the Beirut market, and Direct Economy is cheaper than the main nationwide courier. Taxi Moto costs less than an Uber car for the same trip.</p>
+  </div>
+
+  <div class="card">
+    <h3>Proposed first settings</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Option</th><th class="r">Start price (first 3 km)</th><th class="r">Each extra km</th><th class="r">Night</th></tr></thead>
+        <tbody>
+          <tr><td>Moto package</td><td class="r">$3.00</td><td class="r">$0.25</td><td class="r">+$1</td></tr>
+          <tr><td>Car package</td><td class="r">$6.00</td><td class="r">$0.45</td><td class="r muted">not offered</td></tr>
+          <tr><td>Taxi Moto</td><td class="r">$3.00</td><td class="r">$0.30</td><td class="r">+$1</td></tr>
+          <tr><td>Economy</td><td class="r" colspan="2">company price + $1 Direct's share · pickup capped at $4</td><td class="r muted">none</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Trip</th><th class="r">Moto</th><th class="r">Car</th><th class="r">Taxi Moto</th><th class="r">Driver keeps per km after costs</th></tr></thead>
+        <tbody>
+          <tr><td class="num">5 km</td><td class="r">$3.50</td><td class="r">$7.00</td><td class="r">$3.50</td><td class="r muted" rowspan="5">Moto ≈ $0.12 · Car ≈ $0.10</td></tr>
+          <tr><td class="num">10 km</td><td class="r">$5.00</td><td class="r">$9.00</td><td class="r">$5.00</td></tr>
+          <tr><td class="num">20 km</td><td class="r">$7.50</td><td class="r">$13.50</td><td class="r">$8.00</td></tr>
+          <tr><td class="num">50 km</td><td class="r">$15.00</td><td class="r">$27.00</td><td class="r muted">—</td></tr>
+          <tr><td class="num">100 km</td><td class="r muted">—</td><td class="r">$49.50</td><td class="r muted">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="box">
+      <h3>Open findings</h3>
+      <ul class="small">
+        <li><b>Economy pickup vs Moto:</b> at 20 km, pickup + company + share ≈ $8.50 against Moto $7.50. Proposal: drop-off from 20 km, Direct pickup from 30 km.</li>
+        <li><b>Pickup cap:</b> about $4, so a client far from the company doesn't pay a full Moto trip to reach it.</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>To confirm with real people</h3>
+      <ul class="small">
+        <li>Partner companies' actual price lists</li>
+        <li>How many trips drivers really do per day</li>
+        <li>Some sources are blogs or price aggregators; trips per day are estimates</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="src">
+    <span>Sources:</span>
+    <a href="https://www.lbcgroup.tv/news/economy/896158/lebanon-updates-fuel-prices/en">LBC fuel prices</a>
+    <a href="https://dailybeirut.com/en/lebanon-news/rise-in-fuel-prices/">Daily Beirut</a>
+    <a href="https://wakilni.com/delivery">Wakilni</a>
+    <a href="https://voxire.com/blog/delivery-apps-lebanese-stores-2026/">Voxire · delivery apps 2026</a>
+    <a href="https://voxire.com/blog/ecommerce-shipping-delivery-lebanon-2026/">Voxire · logistics 2026</a>
+    <a href="https://www.taxifarefinder.com/main.php?city=Uber-X-Beirut-Lebanon">TaxiFareFinder · Uber X Beirut</a>
+    <a href="https://jobsboard.ai/job-listings/motorcycle-delivery-driver--bf824290-aa72-4c97-a6d2-a966f853b157">Moto driver job listing</a>
+    <a href="https://www.spritmonitor.de/en/evaluation/economic_motorcycles.html">Spritmonitor · moto fuel use</a>
+  </div>
+</section>
+
+<!-- PARKED -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Later</span>
+    <h2>Parked for now</h2>
+  </div>
+  <div class="parked">
+    <span>Package size and fit check</span><span>Taxi by car (method C)</span><span>Waiting time for shopping</span><span>Trusted</span><span>Medical</span><span>Private driver</span><span>What drivers pay Direct</span>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function () {
+  var TRIPS = [4, 7, 14, 16, 22, 31, 42, 50];
+  var DEFAULTS = { start: 3, incl: 3, perkm: 0.25, round: "0.5" };
+  var ids = ["start", "incl", "perkm", "round"];
+  var el = {};
+  ids.forEach(function (id) { el[id] = document.getElementById(id); });
+  var rows = document.getElementById("rows");
+  var last = {};
+
+  function num(v, d) { var n = parseFloat(v); return isFinite(n) && n >= 0 ? n : d; }
+  function money(v) { return "$" + v.toFixed(2); }
+
+  function render() {
+    var start = num(el.start.value, 0);
+    var incl = num(el.incl.value, 0);
+    var perkm = num(el.perkm.value, 0);
+    var step = num(el.round.value, 0.5) || 0.5;
+    var html = "";
+    TRIPS.forEach(function (km) {
+      var exact = start + Math.max(0, km - incl) * perkm;
+      var shown = Math.round(exact / step) * step;
+      var cls = last[km] !== undefined && last[km] !== shown ? " changed" : "";
+      last[km] = shown;
+      html += "<tr><td class=\"num\">" + km + " km</td><td class=\"r muted\">" + money(exact) +
+        "</td><td class=\"r" + cls + "\"><b>" + money(shown) + "</b></td></tr>";
+    });
+    rows.innerHTML = html;
+  }
+
+  ids.forEach(function (id) { el[id].addEventListener("input", render); });
+  document.getElementById("reset").addEventListener("click", function () {
+    el.start.value = DEFAULTS.start; el.incl.value = DEFAULTS.incl;
+    el.perkm.value = DEFAULTS.perkm.toFixed(2); el.round.value = DEFAULTS.round;
+    render();
+  });
+  render();
+})();
+</script>
+
+</body>
+</html>
