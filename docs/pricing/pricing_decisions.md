@@ -295,6 +295,26 @@ Nothing is hidden or greyed out because of price. **Moto must always cost more t
 
 ---
 
+## Taxi · gender matching and safety (proposed)
+
+Taxi only. Packages never use gender, and gender never changes the price. Full rules: `IMPLEMENTATION_PLAN.md` §3.10.
+
+| Passenger ↓ / Driver → | Female driver | Male driver |
+|---|---|---|
+| Female, "Female driver only" (default) | ✅ | ❌ |
+| Female, "Any driver" | ✅ | ✅ |
+| Male | ❌ | ✅ |
+
+- Gender comes from the approved ID: for now the admin picks Male / Female while approving the ID (option A). Automatic reading by an ID verification service (option B, roughly $0.50–2 per check) is for the developer to evaluate later. Users can never change their own gender.
+- Taxi requires a verified account (selfie + ID) on both sides. No age limit for now.
+- Both sides see each other's verified photo before pickup. Full live tracking. Report and block after every ride.
+- If no female driver is free, the passenger is asked before searching all drivers. It never switches automatically.
+- **Taxi launches only after the Supabase cutover**, because gender and ID approval must be stored on a server the user can't edit.
+
+The order screen starts with two cards, **Packages** and **Taxi**. Taxi shows Moto only, and Car isn't shown.
+
+---
+
 ## Research proposal: starting values (not decided)
 
 Researched on 2026-10-07. These are starting values to review, not decisions. Some sources are blogs or aggregators, and trips per day are estimates.
@@ -348,6 +368,37 @@ Today's system: $2 daily / $20 monthly for everyone.
 > **Feedback:** the monthly subscription proposed here is too high. Revisit it in Step 6.
 
 Sources: [LBC fuel prices](https://www.lbcgroup.tv/news/economy/896158/lebanon-updates-fuel-prices/en) · [Daily Beirut](https://dailybeirut.com/en/lebanon-news/rise-in-fuel-prices/) · [Wakilni](https://wakilni.com/delivery) · [Voxire, delivery apps 2026](https://voxire.com/blog/delivery-apps-lebanese-stores-2026/) · [Voxire, e-commerce logistics 2026](https://voxire.com/blog/ecommerce-shipping-delivery-lebanon-2026/) · [TaxiFareFinder, Uber X Beirut](https://www.taxifarefinder.com/main.php?city=Uber-X-Beirut-Lebanon) · [Motorcycle delivery job listing](https://jobsboard.ai/job-listings/motorcycle-delivery-driver--bf824290-aa72-4c97-a6d2-a966f853b157) · [125cc fuel use](https://www.spritmonitor.de/en/evaluation/economic_motorcycles.html)
+
+---
+
+## Economy pickup cash ✅
+
+The client pays the driver the full Economy price at pickup (e.g. $8.50). The driver keeps the pickup part ($3) and **owes Direct the rest** ($5.50: company price + Direct's share). It's added to the driver's daily balance, like commission, and paid with Whish or "I already paid". If it's unpaid after 07:00 the next day, the driver can't take new jobs.
+
+---
+
+## Step 6 · Driver payments ✅
+
+Each driver still picks subscription or percentage. Only the amounts change.
+
+| | Moto driver (packages + Taxi) | Car driver |
+|---|---|---|
+| Percentage | 15% | 15% |
+| Daily subscription | $3 | $5 |
+| Monthly subscription | $30 | $50 |
+
+- **One percentage for everyone:** it already grows with the fare, so car drivers pay more in dollars.
+- **Subscription by vehicle:** it's a flat amount, so car drivers (higher fares) pay more.
+- **Monthly = the price of 10 days,** as today ($20 vs $2), so full-time drivers get the best deal.
+- New prices apply from a driver's next payment. Time already paid is never cut.
+
+---
+
+## Still open, in this order
+
+1. **Business pricing:** own rates or discounts, volume discounts, weekly/monthly billing, cash-on-delivery for goods, who pays the fee. Until then, businesses use client prices plus the per-business min/max (Moto and Car only).
+
+   Quick proposal waiting for a yes/no: same prices as clients; admin keeps the per-business min/max (Moto and Car); cash on each order as today; Packages only, no Taxi for business accounts; volume discounts, monthly billing and cash collection for goods come later.
 
 ---
 
