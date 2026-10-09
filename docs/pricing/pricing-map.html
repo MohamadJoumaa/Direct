@@ -218,17 +218,22 @@ tr.hl td { background: var(--warn-soft); }
         <tr><td><b>Taxi Moto price</b></td><td>Distance only</td><td>Time, a mix, or a client choice</td><td class="small">Price known before the ride; map time is for cars</td></tr>
         <tr><td><b>Taxi Moto range</b></td><td>0–25 km</td><td>0–50 km like packages</td><td class="small">Passenger safety on highways</td></tr>
         <tr><td><b>Night (midnight–6 am)</b></td><td>Moto and Taxi Moto +$1; Car not offered; Economy none</td><td>One surcharge for all</td><td class="small">Car hours are an admin setting (e.g. until 10 pm)</td></tr>
-        <tr><td><b>Driver gender preference</b></td><td>Affects matching only</td><td>Changing the price</td><td class="small">Never a price factor</td></tr>
-        <tr><td><b>Admin control</b></td><td>Plain fields per option, plus a warning</td><td>Multipliers</td><td class="small">Each field means one thing a driver understands</td></tr>
+        <tr><td><b>Economy ranges</b></td><td>Drop-off from 20 km, Direct pickup from 30 km, pickup capped at $4</td><td>Pickup from 20 km, no cap</td><td class="small">Keeps Economy cheaper than Moto</td></tr>
+        <tr><td><b>Economy pickup cash</b></td><td>Driver keeps the pickup part, owes Direct the rest in the daily balance</td><td>Client paying Direct separately</td><td class="small">Reuses the commission payment flow that exists today</td></tr>
+        <tr><td><b>Taxi service</b></td><td>Moto only; Car not shown</td><td>Taxi by car now</td><td class="small">Car taxi postponed</td></tr>
+        <tr><td><b>Taxi gender matching</b></td><td>Women: female driver only, or any driver. Men: male drivers. Female drivers: women only</td><td>No matching</td><td class="small">Safety; never changes the price</td></tr>
+        <tr><td><b>Where gender comes from</b></td><td>Admin picks it while approving the ID; users can't change it</td><td>A toggle the user sets</td><td class="small">Stops someone posing as a woman. Automatic ID reading is for later</td></tr>
+        <tr><td><b>Driver payments</b></td><td>15% for everyone, or subscription by vehicle: Moto $3/day or $30/month, Car $5/day or $50/month</td><td>$2/day or $20/month for all</td><td class="small">A % grows with the fare; a flat fee doesn't</td></tr>
+        <tr><td><b>Service switches</b></td><td>Admin can turn Taxi and Economy on or off</td><td>Always on</td><td class="small">Taxi stays off until the server move</td></tr>
+        <tr><td><b>Admin control</b></td><td>Plain fields per option, plus warnings</td><td>Multipliers</td><td class="small">Each field means one thing a driver understands</td></tr>
       </tbody>
     </table>
   </div>
   <div class="box">
     <h3>Still open</h3>
     <ul class="small">
-      <li><b>Economy pickup vs Moto:</b> proposal is drop-off from 20 km, Direct pickup from 30 km, so Economy stays cheaper than Moto.</li>
-      <li><b>Economy pickup cap:</b> about $4.</li>
-      <li><b>Driver payments (step 6):</b> subscription and percentage per vehicle. The monthly price must come down from the first proposal.</li>
+      <li><b>Business pricing:</b> to decide last. Proposal: same prices as clients, per-business min/max kept, cash per order, no Taxi for businesses.</li>
+      <li><b>Taxi launch:</b> only after the move to the Supabase server, so gender and ID approval can't be edited by users.</li>
       <li><b>Ask each partner company:</b> does your price include pickup from the sender? What are your real prices per region?</li>
       <li><b>Ask drivers:</b> how many trips they really do per day.</li>
       <li><b>Verify:</b> the longest trip in Lebanon (~250 km).</li>
@@ -248,7 +253,8 @@ tr.hl td { background: var(--warn-soft); }
     <div class="step done"><span class="eyebrow">Step 3 · Package</span><h3>Economy</h3><span class="st ok">Confirmed</span></div>
     <div class="step done"><span class="eyebrow">Step 4 · Taxi</span><h3>Moto</h3><span class="st ok">Confirmed</span></div>
     <div class="step done"><span class="eyebrow">Step 5</span><h3>Final check</h3><span class="st ok">Confirmed</span></div>
-    <div class="step now"><span class="eyebrow">Step 6</span><h3>Driver payments</h3><span class="st wait">Next</span></div>
+    <div class="step done"><span class="eyebrow">Step 6</span><h3>Driver payments</h3><span class="st ok">Confirmed</span></div>
+    <div class="step now"><span class="eyebrow">Last</span><h3>Business pricing</h3><span class="st wait">Later</span></div>
   </div>
 </section>
 
@@ -406,12 +412,8 @@ example:  $3  +  (10 − 3) × $0.25  =  $4.75   →  client sees $5.00</div>
       </ul>
     </div>
     <div class="box">
-      <h3>Noted for later: what drivers pay Direct</h3>
-      <ul class="small">
-        <li><b>Percentage:</b> same for Moto and Car. At 10%, a 20 km moto trip gives Direct $0.75 and a car trip $1.35.</li>
-        <li><b>Subscription:</b> a different price per vehicle, e.g. Moto $2/day, Car $3/day, since a flat fee doesn't grow with the fare.</li>
-      </ul>
-      <span class="st off">Not decided · parked topic</span>
+      <h3>Car must cost more than Moto</h3>
+      <p class="small">Wherever both are offered. If the admin's numbers break this, Settings shows a warning (it never blocks or hides anything).</p>
     </div>
   </div>
 </section>
@@ -557,8 +559,14 @@ example:  $3  +  (10 − 3) × $0.25  =  $4.75   →  client sees $5.00</div>
         <li>Direct's share: one field for each way</li>
         <li>Company on/off and preferred</li>
         <li>Direct's drop-off address and hours</li>
+        <li>Pickup from 30 km, drop-off from 20 km, pickup cap $4</li>
+        <li>Economy on/off</li>
       </ul>
     </div>
+  </div>
+  <div class="box">
+    <h3>Cash on Economy pickup</h3>
+    <p class="small">The client pays the driver the full price at pickup, e.g. $8.50. The driver keeps the pickup part ($3) and owes Direct the rest ($5.50), added to their daily balance like commission. They pay it with Whish or "I already paid". Unpaid after 07:00 the next day, they can't take new jobs.</p>
   </div>
 </section>
 
@@ -583,15 +591,67 @@ example:  $3  +  (10 − 3) × $0.25  =  $4.75   →  client sees $5.00</div>
     </div>
     <p class="small"><b>No client choice between methods:</b> the client would pick the cheapest for that traffic, so the driver always loses. The real choice is the vehicle.</p>
   </div>
+    <div class="card">
+    <h3>Gender matching (Taxi only, never changes the price)</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Passenger ↓ / Driver →</th><th class="r">Female driver</th><th class="r">Male driver</th></tr></thead>
+        <tbody>
+          <tr><td>Woman, "Female driver only" (default)</td><td class="r"><span class="st ok">Yes</span></td><td class="r"><span class="st off">No</span></td></tr>
+          <tr><td>Woman, "Any driver"</td><td class="r"><span class="st ok">Yes</span></td><td class="r"><span class="st ok">Yes</span></td></tr>
+          <tr><td>Man</td><td class="r"><span class="st off">No</span></td><td class="r"><span class="st ok">Yes</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul class="small" style="margin:0;padding-inline-start:18px;display:grid;gap:5px">
+      <li><b>Gender comes from the ID:</b> the admin picks Male / Female while approving it. Users can never change their own.</li>
+      <li><b>Verified both sides:</b> approved selfie and ID for passenger and driver. No age limit.</li>
+      <li><b>Check at pickup:</b> both see the other's verified photo. "Not the person shown" cancels with no fee and files a report.</li>
+      <li><b>Live map for the whole ride.</b> Report and block after every ride; a safety report pauses the account from Taxi until an admin reviews it.</li>
+      <li><b>No female driver free:</b> the passenger is asked before searching all drivers. Never automatic.</li>
+      <li><b>Launch:</b> only after the move to the Supabase server.</li>
+    </ul>
+  </div>
   <div class="two">
     <div class="box">
-      <h3>Later: Taxi · Car uses C</h3>
-      <p class="small">Distance + time from the map, with the price fixed at booking. Traffic really slows a car, and the map's time is accurate for cars.</p>
+      <h3>Later: Taxi · Car</h3>
+      <p class="small">Postponed. Taxi shows Moto only, and Car isn't shown at all.</p>
     </div>
     <div class="box">
       <h3>Later: waiting time for shopping</h3>
       <p class="small">A separate add-on, picked in blocks before the trip. Example: 15 min $3 · 30 min $6 · 60 min $12. Going over is charged at the same rate, confirmed by the driver.</p>
     </div>
+  </div>
+</section>
+
+<!-- PAYMENTS -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Step 6 · Driver payments</span>
+    <h2>How drivers pay Direct</h2>
+    <p>Confirmed. Each driver still picks subscription or percentage. New prices apply from their next payment; time already paid is never cut.</p>
+  </div>
+  <div class="card">
+    <div class="tbl">
+      <table>
+        <thead><tr><th></th><th class="r">Moto driver (packages + Taxi)</th><th class="r">Car driver</th></tr></thead>
+        <tbody>
+          <tr><td>Percentage</td><td class="r">15%</td><td class="r">15%</td></tr>
+          <tr><td>Daily subscription</td><td class="r">$3</td><td class="r">$5</td></tr>
+          <tr><td>Monthly subscription</td><td class="r">$30</td><td class="r">$50</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Moto driver doing…</th><th class="r">15% costs</th><th class="r">Daily plan</th><th class="r">Monthly plan, per day</th></tr></thead>
+        <tbody>
+          <tr><td>3 trips a day (~$15)</td><td class="r">$2.25</td><td class="r">$3.00</td><td class="r">$1.00</td></tr>
+          <tr><td>10 trips a day (~$50)</td><td class="r">$7.50</td><td class="r">$3.00</td><td class="r">$1.00</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small"><b>Why:</b> one percentage is fair because it already grows with the fare. A subscription is flat, so car drivers pay more. Monthly costs the price of 10 days, as today, so full-time drivers get the best deal.</p>
   </div>
 </section>
 
@@ -714,10 +774,10 @@ example:  $3  +  (10 − 3) × $0.25  =  $4.75   →  client sees $5.00</div>
 
   <div class="two">
     <div class="box">
-      <h3>Open findings</h3>
+      <h3>Findings, now decided</h3>
       <ul class="small">
-        <li><b>Economy pickup vs Moto:</b> at 20 km, pickup + company + share ≈ $8.50 against Moto $7.50. Proposal: drop-off from 20 km, Direct pickup from 30 km.</li>
-        <li><b>Pickup cap:</b> about $4, so a client far from the company doesn't pay a full Moto trip to reach it.</li>
+        <li><b>Economy pickup vs Moto:</b> at 20 km, pickup + company + share ≈ $8.50 against Moto $7.50. Decided: drop-off from 20 km, Direct pickup from 30 km.</li>
+        <li><b>Pickup cap:</b> decided at $4, so a client far from the company doesn't pay a full Moto trip to reach it.</li>
       </ul>
     </div>
     <div class="box">
@@ -750,7 +810,7 @@ example:  $3  +  (10 − 3) × $0.25  =  $4.75   →  client sees $5.00</div>
     <h2>Parked for now</h2>
   </div>
   <div class="parked">
-    <span>Package size and fit check</span><span>Taxi by car (method C)</span><span>Waiting time for shopping</span><span>Trusted</span><span>Medical</span><span>Private driver</span><span>What drivers pay Direct</span>
+    <span>Package size and fit check</span><span>Taxi by car</span><span>Waiting time for shopping</span><span>Trusted</span><span>Medical</span><span>Private driver</span><span>Business pricing</span><span>Car box fees</span>
   </div>
 </section>
 

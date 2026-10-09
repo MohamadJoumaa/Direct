@@ -332,6 +332,7 @@ On the settings page and the partner companies page, run `pricingWarnings(settin
   - drop-off total = max company price + share (drop-off) + drop-off fee. Warn if **≥** `motoPrice(km)`.
   - pickup total = pickup cap + max company price + share (pickup), only from `economy_pickup_min_km`. Warn if **≥** `motoPrice(km)`.
 - **Car vs Moto:** for every whole km from `max(moto_min_km, car_min_km)` to `min(moto_max_km, car_max_km)`, by day. Warn if `carPrice(km)` **≤** `motoPrice(km)`.
+- **Known limit:** the Economy check uses each company's highest price, which is the worst case. With real tables it can warn at distances where that expensive route (e.g. North–South) can't actually happen. That's acceptable: the warning only advises and never blocks. A finer per-route check can come later.
 - Group consecutive km into one message, e.g. *"With these prices, Economy (pickup) costs the same as or more than Moto on trips from 20 to 29 km. Raise the Moto rates or lower Economy."*
 
 ### 3.7 Driver payments (how drivers pay Direct)
